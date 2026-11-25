@@ -8,6 +8,7 @@ import { byPosition } from '../lib/positions.ts'
 import { supabase } from '../lib/supabase.ts'
 import { toast } from '../ui/toast.tsx'
 import { applyOp, isDebounced, sortSheet, tryMerge, type SheetData, type SheetOp, type SheetOpBody } from './ops.ts'
+import { mergeRemote, type RemoteChange } from './remote.ts'
 import { BLOCK_COLUMNS, CHARACTER_COLUMNS, SECTION_COLUMNS, type BlockRow, type CharacterRow, type SectionRow } from './types.ts'
 
 export const DEBOUNCE_MS = 400
@@ -76,6 +77,20 @@ export class SheetStore {
     if (err) throw err
     if (!c.data) return null
     return { character: c.data, sections: (s.data ?? []).sort(byPosition), blocks: (b.data ?? []).sort(byPosition) }
+  }
+
+  /** Fold a realtime change into the server copy; pending local ops stay on top. */
+  applyRemote(change: RemoteChange) {
+    if (!this.server) return
+    const next = mergeRemote(this.server, change)
+    if (next === this.server) return
+    this.server = next
+    this.recompute()
+  }
+
+  /** True if this store has anything loaded worth refreshing. */
+  get loaded() {
+    return this.server !== null
   }
 
   /** Apply an edit locally right away and queue it for the server. */
@@ -241,6 +256,16 @@ export class SheetStore {
 }
 
 const stores = new Map<string, SheetStore>()
+
+/** The store for a character, if one exists (doesn't create it). */
+export function peekSheetStore(characterId: string | undefined): SheetStore | undefined {
+  return characterId ? stores.get(characterId) : undefined
+}
+
+/** Refetch every loaded sheet (after a reconnect), and retry anything queued. */
+export function resyncSheets() {
+  for (const s of stores.values()) if (s.loaded) void s.load()
+}
 
 export function getSheetStore(characterId: string): SheetStore {
   let s = stores.get(characterId)

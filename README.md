@@ -120,6 +120,11 @@ If you have Postgres 15+ and `psql` locally, the same checks run in plain SQL ag
 PGHOST=localhost PGUSER=postgres npm run test:rls:local
 ```
 
+## Troubleshooting
+
+- **Changes don't show up live in the other window.** Migration `0004_realtime.sql` adds the tables to the `supabase_realtime` publication. Check **Database → Publications → supabase_realtime** lists `sessions`, `session_members`, `characters`, `sheet_sections`, `sheet_blocks` (and the rest). Reloading always shows the latest data.
+- **"Could not find the function … in the schema cache"** or **"Something in that form isn't valid"** right after pulling: a new migration hasn't been applied. Run `npm run db:push`.
+
 ## 6. Deploy to Vercel
 
 1. Import the GitHub repo in Vercel. The framework preset is **Vite**: build `npm run build`, output `dist`.

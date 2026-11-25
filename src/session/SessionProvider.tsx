@@ -1,10 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { friendlyError } from '../lib/errors.ts'
 import { clearLastSession, setLastSession } from '../lib/storage.ts'
 import { ensureAnonymousUser, supabase } from '../lib/supabase.ts'
 import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
 import { CHARACTER_COLUMNS, type CharacterRow } from '../sheet/types.ts'
+import { upsertRow, type RemoteChange } from '../sheet/remote.ts'
+import { peekSheetStore, resyncSheets } from '../sheet/store.ts'
+import { openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
 import type { Member, SessionRow } from './types.ts'
 
 type SessionContextValue = {
@@ -15,6 +18,8 @@ type SessionContextValue = {
   characters: CharacterRow[]
   me: Member
   isGm: boolean
+  /** realtime connection (SPEC §10) */
+  connection: ConnectionState
   memberName: (userId: string | null) => string | null
   refresh: () => Promise<void>
   updateMe: (patch: Partial<Pick<Member, 'display_name' | 'color'>>) => Promise<void>
@@ -35,13 +40,16 @@ type State =
   | { kind: 'ready'; uid: string; session: SessionRow; members: Member[]; characters: CharacterRow[] }
 
 /**
- * Loads one session for the current anonymous user. If the user isn't (or is no
- * longer) a member, forgets the session and goes home. Realtime arrives in Slice 5.
+ * Loads one session for the current anonymous user and keeps it live over realtime.
+ * If the user isn't (or is no longer) a member, forgets the session and goes home.
  */
 export function SessionProvider({ sessionId, children }: { sessionId: string; children: ReactNode }) {
   const navigate = useNavigate()
   const [state, setState] = useState<State>({ kind: 'loading' })
+  const [connection, setConnection] = useState<ConnectionState>('connecting')
+  const loadedOnce = useRef(false)
 
+  /** Fetch everything. After the first load, failures keep the current state (e.g. offline). */
   const load = useCallback(async () => {
     try {
       const uid = await ensureAnonymousUser()
@@ -70,14 +78,76 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         displayName: me.display_name,
       })
       setState({ kind: 'ready', uid, session: s.data, members: m.data ?? [], characters: c.data ?? [] })
+      loadedOnce.current = true
     } catch (e) {
-      setState({ kind: 'error', message: friendlyError(e) })
+      if (!loadedOnce.current) setState({ kind: 'error', message: friendlyError(e) })
     }
   }, [sessionId, navigate])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  // Realtime: open once we know who we are.
+  const uid = state.kind === 'ready' ? state.uid : null
+  useEffect(() => {
+    if (!uid) return
+    const onChange = (c: Change) => {
+      const row = c.row
+      switch (c.table) {
+        case 'sessions':
+          setState((prev) => prev.kind === 'ready' && (row.version as number) > prev.session.version
+            ? { ...prev, session: { ...prev.session, ...(row as SessionRow) } } : prev)
+          return
+        case 'session_members': {
+          if (row.session_id !== sessionId) return
+          if (c.type === 'DELETE' && row.user_id === uid) {
+            clearLastSession(sessionId)
+            navigate('/', { replace: true, state: { notice: 'You’re no longer in that session. The GM may have removed you.' } })
+            return
+          }
+          setState((prev) => {
+            if (prev.kind !== 'ready') return prev
+            const others = prev.members.filter((m) => m.user_id !== row.user_id)
+            const members = c.type === 'DELETE' ? others
+              : [...others, row as Member].sort((a, b) => a.joined_at.localeCompare(b.joined_at))
+            return { ...prev, members }
+          })
+          return
+        }
+        case 'characters': {
+          setState((prev) => {
+            if (prev.kind !== 'ready') return prev
+            if (c.type !== 'DELETE' && row.session_id !== sessionId) return prev
+            const characters = upsertRow(prev.characters, c.type, row as CharacterRow)
+            if (characters === prev.characters) return prev
+            return { ...prev, characters: [...characters].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)) }
+          })
+          peekSheetStore(row.id as string)?.applyRemote({ table: 'characters', type: c.type, row } as RemoteChange)
+          return
+        }
+        case 'sheet_sections':
+        case 'sheet_blocks':
+          peekSheetStore(row.character_id as string)?.applyRemote({ table: c.table, type: c.type, row } as RemoteChange)
+          return
+        case 'session_events':
+          // Something became hidden from us (we can't receive its UPDATE), or visible: refetch.
+          if (c.type === 'INSERT' && row.kind === 'visibility_changed') {
+            void load()
+            resyncSheets()
+          }
+          return
+      }
+    }
+    return openSessionChannel(sessionId, {
+      onChange,
+      onState: setConnection,
+      onResync: () => {
+        void load()
+        resyncSheets()
+      },
+    })
+  }, [uid, sessionId, navigate, load])
 
   const value = useMemo<SessionContextValue | null>(() => {
     if (state.kind !== 'ready') return null
@@ -89,6 +159,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       characters: state.characters,
       me,
       isGm: me.role === 'gm',
+      connection,
       memberName: (userId) => state.members.find((x) => x.user_id === userId)?.display_name ?? null,
       refresh: load,
       async updateMe(patch) {
@@ -109,7 +180,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         navigate('/', { replace: true, state: { notice: `You left “${state.session.name}”.` } })
       },
     }
-  }, [state, load, navigate, sessionId])
+  }, [state, load, navigate, sessionId, connection])
 
   if (state.kind === 'loading') return <FullScreenSpinner label="Opening session…" />
   if (state.kind === 'error') {

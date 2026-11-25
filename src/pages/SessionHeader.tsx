@@ -5,7 +5,7 @@ import { IconBack } from '../ui/icons.tsx'
 
 /** Sticky header: colour stripe, back link, session name, optional player tabs. */
 export function SessionHeader({ subtitle, back = '/', tabs = false }: { subtitle?: string; back?: string; tabs?: boolean }) {
-  const { session, me, characters, uid, isGm } = useSession()
+  const { session, me, characters, uid, isGm, connection } = useSession()
   const c = colorOf(me.color)
   const mine = characters.find((x) => x.kind === 'pc' && x.owner_id === uid)
   const tab = ({ isActive }: { isActive: boolean }) =>
@@ -23,6 +23,12 @@ export function SessionHeader({ subtitle, back = '/', tabs = false }: { subtitle
           <p className="truncate text-base font-bold leading-tight">{session.name}</p>
           {subtitle && <p className="truncate text-sm text-[color:var(--muted)]">{subtitle}</p>}
         </div>
+        {connection === 'reconnecting' && (
+          <span role="status" className="mr-2 flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <span className="size-2 animate-pulse rounded-full bg-amber-600" aria-hidden="true" />
+            Reconnecting…
+          </span>
+        )}
       </div>
       {tabs && !isGm && (
         <nav className="mx-auto flex max-w-screen-sm px-2" aria-label="Player views">
