@@ -4,7 +4,7 @@ import { friendlyError } from '../lib/errors.ts'
 import { GM_CODE_PROBLEM_TEXT, gmCodeProblem, normalizeGmCode, suggestGmCode } from '../lib/gmCode.ts'
 import { extractInviteCode, isValidInviteCode } from '../lib/invite.ts'
 import { clearLastSession, getLastSession, setLastSession, type LastSession } from '../lib/storage.ts'
-import { ensureAnonymousUser, isConfigured, supabase } from '../lib/supabase.ts'
+import { ensureAnonymousUser, isConfigured, supabase, withFreshUserRetry } from '../lib/supabase.ts'
 import { ColorPicker } from '../ui/ColorPicker.tsx'
 import type { PlayerColor } from '../ui/colors.ts'
 import { Button, Card, Notice, TextField } from '../ui/primitives.tsx'
@@ -149,7 +149,7 @@ function GmCard() {
     setBusy(true)
     try {
       await ensureAnonymousUser()
-      const { data, error } = await supabase.rpc('claim_gm', { p_gm_code: code })
+      const { data, error } = await withFreshUserRetry(() => supabase.rpc('claim_gm', { p_gm_code: code }))
       if (error) throw error
       if (data) {
         await rememberGm(data as string)
@@ -178,12 +178,12 @@ function GmCard() {
     setError(null)
     try {
       await ensureAnonymousUser()
-      const { data, error } = await supabase.rpc('create_session', {
+      const { data, error } = await withFreshUserRetry(() => supabase.rpc('create_session', {
         p_gm_code: step.code,
         p_name: sessionName.trim(),
         p_display_name: displayName.trim(),
         p_color: color,
-      })
+      }))
       if (error) throw error
       const { session_id, invite_code } = data as { session_id: string; invite_code: string }
       setLastSession({

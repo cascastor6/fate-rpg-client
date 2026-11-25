@@ -21,3 +21,13 @@ describe('friendlyError', () => {
     expect(isNetworkError({ code: '42501', message: 'Failed to fetch' })).toBe(false)
   })
 })
+
+describe('stale sign-in', () => {
+  it('explains a deleted anonymous user instead of a raw foreign key error', async () => {
+    const { STALE_USER, isStaleUser } = await import('./errors.ts')
+    const fk = { code: '23503', message: 'insert or update on table "gm_code_attempts" violates foreign key constraint "gm_code_attempts_user_id_fkey"' }
+    expect(isStaleUser(fk)).toBe(true)
+    expect(friendlyError(fk)).toBe(STALE_USER)
+    expect(isStaleUser({ code: '23503', message: 'violates foreign key constraint "sheet_blocks_character_id_section_id_fkey"' })).toBe(false)
+  })
+})
