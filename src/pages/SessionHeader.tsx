@@ -1,6 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
 import { useSession } from '../session/SessionProvider.tsx'
 import { colorOf } from '../ui/colors.ts'
+import { getDiceStore } from '../dice/store.ts'
 import { IconBack } from '../ui/icons.tsx'
 
 /** Sticky header: colour stripe, back link, session name, optional player tabs. */
@@ -23,6 +24,14 @@ export function SessionHeader({ subtitle, back = '/', tabs = false }: { subtitle
           <p className="truncate text-base font-bold leading-tight">{session.name}</p>
           {subtitle && <p className="truncate text-sm text-[color:var(--muted)]">{subtitle}</p>}
         </div>
+        <button
+          type="button"
+          onClick={() => getDiceStore(session.id).setLogOpen(true)}
+          className="flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>
+          Log
+        </button>
         {connection === 'reconnecting' && (
           <span role="status" className="mr-2 flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
             <span className="size-2 animate-pulse rounded-full bg-amber-600" aria-hidden="true" />

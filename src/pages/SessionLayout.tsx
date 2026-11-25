@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, Outlet, useParams } from 'react-router-dom'
+import { DiceLayer } from '../dice/DiceLayer.tsx'
 import { SessionProvider, useSession } from '../session/SessionProvider.tsx'
 
 /** /s/:sessionId — loads the session (or bounces home) for everything below it. */
@@ -9,6 +10,7 @@ export default function SessionLayout() {
   return (
     <SessionProvider key={sessionId} sessionId={sessionId}>
       <Outlet />
+      <DiceLayer />
     </SessionProvider>
   )
 }

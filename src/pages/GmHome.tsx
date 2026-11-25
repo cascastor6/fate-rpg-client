@@ -4,6 +4,7 @@ import { InvitePanel, MembersList, YouPanel } from '../session/SessionWidgets.ts
 import { colorOf } from '../ui/colors.ts'
 import { Button, Card } from '../ui/primitives.tsx'
 import { SessionHeader } from './SessionHeader.tsx'
+import { GmRollsCard } from './GmRollsCard.tsx'
 import { TemplatesCard } from './TemplatesCard.tsx'
 
 /** Slice 2 placeholder GM screen: invite + members. The real GM screen lands in Slice 7. */
@@ -53,6 +54,7 @@ export default function GmHome() {
             </ul>
           )}
         </Card>
+        <GmRollsCard />
         <TemplatesCard />
         <MembersList />
         <YouPanel />

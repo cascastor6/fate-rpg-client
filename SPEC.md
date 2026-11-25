@@ -558,7 +558,15 @@ The sticky bar's **Roll** opens a sheet with: Plain 4dF, a searchable list of ro
 ### 7.6 Roll log
 A right-hand drawer on desktop, a bottom drawer on phones. It shows the latest 50 rolls and then appends live. Each entry has the roller's name in their colour, mini dice in their colour, the breakdown, the ladder result and a relative time.
 
+### 7.6a Dice tray (as built)
+- Rolls play one at a time in a tray near the top of every session screen. It has a border in the roller's colour, shows their name, the 4 tumbling cubes, then the breakdown.
+- It closes on tap, or about 2.6 s after landing; with a backlog of more than 2, after 0.9 s.
+- History loaded from the server (on open, or after a reconnect) never animates. Only rolls that arrive live, or from your own RPC, do.
+- The log button is in the header ("Log") on every session screen.
+- The GM's open/closed default is a card on the GM screen for now (Slice 7 moves it to the toolbar).
+
 ### 7.7 Big result view
+_Built in Slice 8._
 On phones, after a roll lands, a full-screen overlay tinted with the roller's colour shows the total and ladder name in huge type. It closes on tap or after 4 s, and can be pinned open. It can be turned off for other people's rolls.
 
 ### 7.8 Player colours

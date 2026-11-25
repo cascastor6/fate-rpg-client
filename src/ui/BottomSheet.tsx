@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { overlays } from './overlays.ts'
 
 /**
  * Mobile bottom sheet (SPEC §9.1): portal + backdrop, drag the handle down or tap the
@@ -41,6 +42,7 @@ export function BottomSheet({
 
   useEffect(() => {
     if (!open) return
+    overlays.opened()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && dismissRef.current()
     document.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
@@ -52,6 +54,7 @@ export function BottomSheet({
       first?.focus()
     })
     return () => {
+      overlays.closed()
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
       previouslyFocused?.focus?.()

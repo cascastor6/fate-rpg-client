@@ -6,6 +6,7 @@ import { ensureAnonymousUser, supabase } from '../lib/supabase.ts'
 import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
 import { CHARACTER_COLUMNS, type CharacterRow } from '../sheet/types.ts'
 import { upsertRow, type RemoteChange } from '../sheet/remote.ts'
+import { getDiceStore } from '../dice/store.ts'
 import { peekSheetStore, resyncSheets } from '../sheet/store.ts'
 import { openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
 import type { Member, SessionRow } from './types.ts'
@@ -130,13 +131,19 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         case 'sheet_blocks':
           peekSheetStore(row.character_id as string)?.applyRemote({ table: c.table, type: c.type, row } as RemoteChange)
           return
-        case 'session_events':
+        case 'rolls':
+          getDiceStore(sessionId).applyRemote(c.table, c.type, row)
+          return
+        case 'session_events': {
+          getDiceStore(sessionId).applyRemote(c.table, c.type, row)
           // Something became hidden from us (we can't receive its UPDATE), or visible: refetch.
-          if (c.type === 'INSERT' && row.kind === 'visibility_changed') {
+          const table = (row.payload as { table?: string } | null)?.table
+          if (c.type === 'INSERT' && row.kind === 'visibility_changed' && table !== 'rolls') {
             void load()
             resyncSheets()
           }
           return
+        }
       }
     }
     return openSessionChannel(sessionId, {
@@ -145,6 +152,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       onResync: () => {
         void load()
         resyncSheets()
+        void getDiceStore(sessionId).load()
       },
     })
   }, [uid, sessionId, navigate, load])

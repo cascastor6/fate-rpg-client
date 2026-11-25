@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useDice } from '../dice/useDice.ts'
+import { overlays } from '../ui/overlays.ts'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { friendlyError } from '../lib/errors.ts'
 import { supabase } from '../lib/supabase.ts'
-import { signed } from '../dice/ladder.ts'
 import { useSession } from '../session/SessionProvider.tsx'
 import { EditSheet } from '../sheet/components/EditSheet.tsx'
 import { SheetToolsSheet, TemplatesSheet } from '../sheet/components/EditSheets.tsx'
@@ -35,6 +36,12 @@ function SheetPage({ characterId }: { characterId: string }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [editMode, setEditMode] = useState(false)
+  const dice = useDice()
+  // The floating roll button hides while the layout is being edited.
+  useEffect(() => {
+    overlays.setBusy(editMode)
+    return () => overlays.setBusy(false)
+  }, [editMode])
   const [tools, setTools] = useState(false)
   const [templates, setTemplates] = useState(false)
 
@@ -82,8 +89,8 @@ function SheetPage({ characterId }: { characterId: string }) {
     navigate(`/s/${session.id}/gm`, { replace: true })
   }
 
-  const onRoll = (b: BlockRow) =>
-    toast(`Rolling ${b.label || 'that skill'} (${signed(typeof b.value === 'number' ? b.value : 0)}) arrives with the dice in Slice 6.`)
+  // Press a skill to roll it (SPEC §6.1); ignored while one of our rolls is in flight.
+  const onRoll = (b: BlockRow) => void dice.store.roll({ characterId: c.id, blockId: b.id })
 
   return (
     <>
@@ -188,7 +195,7 @@ function SheetPage({ characterId }: { characterId: string }) {
         ) : isTemplate ? (
           canEdit && <Button className="flex-1" onClick={() => setEditMode(true)}><IconPencil className="size-4" /> Edit layout</Button>
         ) : canEdit && (
-          <Button className="flex-1" onClick={() => toast('Rolling arrives with the dice in Slice 6.')}>
+          <Button className="flex-1" onClick={() => dice.store.openDialog(c.id)}>
             <IconDie /> Roll
           </Button>
         )}
