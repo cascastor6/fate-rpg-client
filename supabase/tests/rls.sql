@@ -68,6 +68,13 @@ select t_ok((select count(*) from sheet_blocks where character_id = :'c1') = 3, 
 select t_err($$select public.create_character('$$ || :'sa' || $$', '{"kind":"npc","name":"x","sections":[],"blocks":[]}')$$, 'not_gm', 'player cannot create NPC');
 select t_err($$insert into public.sheet_blocks(character_id,id,section_id,type,label,value,position) values ('$$ || :'c1' || $$','b_bad0000001','s_skills','skill','x','"three"',1)$$, 'invalid_block', 'validation rejects a string skill value');
 select t_err($$insert into public.sheet_blocks(character_id,id,section_id,type,label,value,props,position) values ('$$ || :'c1' || $$','b_bad0000002','s_skills','skill','x','1','{"evil":1}',1)$$, 'invalid_block', 'validation rejects unknown props');
+insert into public.sheet_blocks(character_id,id,section_id,type,label,value,props,position) values (:'c1','b_gear000001','s_skills','gear','Grappling hook','"+2 when climbing"','{"quantity":2}',99);
+select t_ok((select props->>'quantity' from sheet_blocks where id = 'b_gear000001') = '2', 'gear block with name, effect and quantity');
+insert into public.sheet_blocks(character_id,id,section_id,type,label,value,position) values (:'c1','b_gear000002','s_skills','gear','Rope','""',100);
+select t_ok(exists (select 1 from sheet_blocks where id = 'b_gear000002'), 'gear block with no effect or quantity');
+select t_err($$insert into public.sheet_blocks(character_id,id,section_id,type,label,value,props,position) values ('$$ || :'c1' || $$','b_gear000003','s_skills','gear','x','""','{"quantity":-1}',101)$$, 'invalid_block', 'gear rejects a negative quantity');
+select t_ok((public.patch_block(:'c1', 'b_gear000002', '{"props":{"quantity":5}}')).props->>'quantity' = '5', 'gear quantity can be set later');
+delete from public.sheet_blocks where id in ('b_gear000001','b_gear000002');
 select t_ok((public.adjust_block_value(:'c1', 'b_fight00001', 1)).value = '4'::jsonb, 'A1 adjusts own skill');
 select t_ok((public.set_stress_box(:'c1', 'b_phys000001', 1, true)).value -> 1 ->> 'checked' = 'true', 'A1 ticks own stress');
 select t_ok((public.patch_block(:'c1', 'b_hc00000001', '{"value":"Knight Errant","props":{"role":"high_concept"}}')).value = '"Knight Errant"', 'A1 patches own aspect');

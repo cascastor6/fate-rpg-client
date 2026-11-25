@@ -2,7 +2,7 @@
 // templates and export use the flat "logical" block format.
 
 export const BLOCK_TYPES = [
-  'text', 'aspect', 'skill', 'stress', 'consequence', 'counter', 'number', 'image', 'separator',
+  'text', 'aspect', 'skill', 'stress', 'consequence', 'counter', 'number', 'image', 'separator', 'gear',
 ] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
@@ -20,6 +20,8 @@ export type BlockProps = {
   max?: number
   refresh?: number
   alt?: string
+  /** gear: how many you carry (optional) */
+  quantity?: number
 }
 
 /** Allowed props keys per type (mirrors private.validate_block). */
@@ -33,6 +35,7 @@ export const PROPS_BY_TYPE: Record<BlockType, readonly (keyof BlockProps)[]> = {
   number: ['hint'],
   image: ['hint', 'alt'],
   separator: ['hint'],
+  gear: ['hint', 'quantity'],
 }
 
 export type BlockValue = string | number | StressBox[] | null

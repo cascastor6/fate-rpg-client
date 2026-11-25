@@ -10,7 +10,7 @@ export function blockProblem(type: string, value: unknown, props: Record<string,
   const t = type as BlockType
 
   switch (t) {
-    case 'text': case 'aspect': case 'consequence': case 'image':
+    case 'text': case 'aspect': case 'consequence': case 'image': case 'gear':
       if (typeof value !== 'string') return 'value must be text'
       if (value.length > 2000) return 'text is too long (max 2000)'
       if (t === 'image' && value !== '' && !value.startsWith('https://')) return 'image URL must start with https://'
@@ -43,7 +43,7 @@ export function blockProblem(type: string, value: unknown, props: Record<string,
     if ((p === 'hint' || p === 'alt') && (typeof v !== 'string' || v.length > 200)) return `invalid ${k}`
     if ((p === 'multiline' || p === 'rollable') && typeof v !== 'boolean') return `invalid ${k}`
     if (p === 'role' && !['high_concept', 'trouble', 'other'].includes(v as string)) return 'invalid role'
-    if ((p === 'shift' || p === 'free_invokes' || p === 'max' || p === 'refresh') && (!isInt(v) || v < 0 || v > 999)) {
+    if ((p === 'shift' || p === 'free_invokes' || p === 'max' || p === 'refresh' || p === 'quantity') && (!isInt(v) || v < 0 || v > 999)) {
       return `invalid ${k}`
     }
   }

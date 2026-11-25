@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { signed } from '../../dice/ladder.ts'
 import { BottomSheet } from '../../ui/BottomSheet.tsx'
 import { Button } from '../../ui/primitives.tsx'
+import { IconMinus, IconPlus } from '../../ui/icons.tsx'
 import { Stepper } from '../../ui/Stepper.tsx'
 import type { BlockPatch, SheetOpBody } from '../ops.ts'
 import type { BlockRow } from '../types.ts'
@@ -25,6 +26,8 @@ export function BlockEditor({
   const [text, setText] = useState(typeof block.value === 'string' ? block.value : '')
   const [numText, setNumText] = useState(String(typeof block.value === 'number' ? block.value : 0))
   const [invokes, setInvokes] = useState(block.props.free_invokes ?? 0)
+  const isGear = block.type === 'gear'
+  const [qtyText, setQtyText] = useState(block.props.quantity != null ? String(block.props.quantity) : '')
   const [problem, setProblem] = useState<string | null>(null)
 
   const numValue = Number(numText)
@@ -32,7 +35,16 @@ export function BlockEditor({
   const save = useCallback(() => {
     const patch: BlockPatch = {}
     // Name is editable for skills (NPC skills start blank) and for counters/numbers.
-    if (isNumeric && label.trim() !== block.label) patch.label = label.trim()
+    if ((isNumeric || isGear) && label.trim() !== block.label) patch.label = label.trim()
+    if (isGear) {
+      const q = qtyText.trim()
+      if (q !== '' && !/^\d{1,3}$/.test(q)) {
+        setProblem('Quantity must be a whole number from 0 to 999, or empty.')
+        return
+      }
+      const next = q === '' ? undefined : Number(q)
+      if (next !== block.props.quantity) patch.props = { ...patch.props, quantity: next ?? null }
+    }
     if (isNumeric) {
       if (numText.trim() === '' || !Number.isFinite(numValue)) {
         setProblem('Enter a number.')
@@ -49,7 +61,7 @@ export function BlockEditor({
     if (Object.keys(patch).length) {
       const value = 'value' in patch ? patch.value : block.value
       const props = { ...block.props, ...(patch.props ?? {}) }
-      if (props.free_invokes === null) delete props.free_invokes
+      for (const k of Object.keys(props) as (keyof typeof props)[]) if (props[k] === null) delete props[k]
       const err = blockProblem(block.type, value, props as Record<string, unknown>)
       if (err) {
         setProblem(err.charAt(0).toUpperCase() + err.slice(1) + '.')
@@ -58,9 +70,9 @@ export function BlockEditor({
       send({ kind: 'patch', blockId: block.id, patch })
     }
     onClose()
-  }, [block, invokes, isNumeric, label, numText, numValue, onClose, send, text])
+  }, [block, invokes, isGear, isNumeric, label, numText, numValue, onClose, qtyText, send, text])
 
-  const title = block.label || (block.type === 'skill' ? 'Skill' : block.type.charAt(0).toUpperCase() + block.type.slice(1))
+  const title = isGear ? 'Gear' : block.label || (block.type === 'skill' ? 'Skill' : block.type.charAt(0).toUpperCase() + block.type.slice(1))
   const counterMax = block.type === 'counter' ? block.props.max : undefined
 
   return (
@@ -105,6 +117,35 @@ export function BlockEditor({
                 data-autofocus
                 className="min-h-12 w-32 rounded-xl border border-[color:var(--border)] bg-[color:var(--bg)] px-3 text-center text-xl tabular-nums"
               />
+            </div>
+          </>
+        )}
+
+        {isGear && (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium">Gear name</span>
+              <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={200} placeholder="e.g. Grappling hook" data-autofocus
+                className="min-h-12 rounded-xl border border-[color:var(--border)] bg-[color:var(--bg)] px-3 text-lg" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium">Effect <span className="font-normal text-[color:var(--muted)]">(optional)</span></span>
+              <textarea value={text} onChange={(e) => { setText(e.target.value); setProblem(null) }} rows={3} maxLength={2000}
+                placeholder="e.g. +2 to Athletics when climbing" className="rounded-xl border border-[color:var(--border)] bg-[color:var(--bg)] p-3 text-base leading-snug" />
+            </label>
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium">Quantity <span className="font-normal text-[color:var(--muted)]">(optional, leave empty for none)</span></span>
+              <div className="flex items-center gap-2">
+                <button type="button" aria-label="One less" disabled={(Number(qtyText) || 0) <= 0}
+                  onClick={() => { setQtyText(String(Math.max(0, (Number(qtyText) || 0) - 1))); setProblem(null) }}
+                  className="flex size-12 items-center justify-center rounded-full border border-[color:var(--border)] disabled:opacity-30"><IconMinus /></button>
+                <input inputMode="numeric" value={qtyText} onChange={(e) => { setQtyText(e.target.value); setProblem(null) }} aria-label="Quantity"
+                  placeholder="—" className="min-h-12 w-20 rounded-xl border border-[color:var(--border)] bg-[color:var(--bg)] px-2 text-center text-xl tabular-nums" />
+                <button type="button" aria-label="One more"
+                  onClick={() => { setQtyText(String(Math.min(999, (Number(qtyText) || 0) + 1))); setProblem(null) }}
+                  className="flex size-12 items-center justify-center rounded-full border border-[color:var(--border)]"><IconPlus /></button>
+                {qtyText !== '' && <Button variant="ghost" onClick={() => setQtyText('')}>Clear</Button>}
+              </div>
             </div>
           </>
         )}

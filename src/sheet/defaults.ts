@@ -11,6 +11,7 @@ export const BLOCK_TYPE_INFO: Record<BlockType, { name: string; blurb: string }>
   text: { name: 'Text', blurb: 'Notes, stunts, descriptions' },
   image: { name: 'Image', blurb: 'A picture from an https:// link' },
   separator: { name: 'Divider', blurb: 'A line with an optional heading' },
+  gear: { name: 'Gear', blurb: 'An item: name, optional effect and quantity' },
 }
 
 /** Fields for a freshly added block of a type. */
@@ -25,6 +26,7 @@ export function defaultBlock(type: BlockType): { label: string; value: BlockValu
     case 'text': return { label: 'Notes', value: '', props: { multiline: true } }
     case 'image': return { label: 'Image', value: '', props: {} }
     case 'separator': return { label: '', value: null, props: {} }
+    case 'gear': return { label: '', value: '', props: {} }
   }
 }
 

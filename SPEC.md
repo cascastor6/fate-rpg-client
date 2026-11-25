@@ -439,6 +439,10 @@ Logical examples, one per type:
 ```json
 { "id": "b_portrait01", "type": "image", "label": "Portrait", "value": "https://example.com/knight.png", "section": "s_notes", "alt": "Portrait of the knight" }
 ```
+**gear** (migration `0007`): an item. `label` is the gear name; `value` is the effect text (`''` = none); `quantity` is optional (an integer from 0 to 999; absent = not counted). On the sheet it shows the name, the effect underneath, and ×N with inline −/+ when there is a quantity.
+```json
+{ "id": "b_grapple001", "type": "gear", "label": "Grappling hook", "value": "+2 to Athletics when climbing", "section": "s_extras", "quantity": 2 }
+```
 **separator**: a divider with an optional sub-heading; `value` is always `null`.
 ```json
 { "id": "b_sep0000001", "type": "separator", "label": "Gear", "value": null, "section": "s_notes" }

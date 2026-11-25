@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ladderLabel, ladderName, signed } from '../dice/ladder.ts'
 import { byPosition, needsRebalance, positionBetween } from '../lib/positions.ts'
@@ -59,9 +59,25 @@ describe('blockProblem', () => {
     expect(blockProblem('separator', null)).toBeNull()
     expect(blockProblem('counter', 1, { max: -1 })).toMatch(/max/)
     expect(blockProblem('nope', 1)).toMatch(/unknown/)
+    expect(blockProblem('gear', '', {})).toBeNull()
+    expect(blockProblem('gear', '+2 to Shoot', { quantity: 3 })).toBeNull()
+    expect(blockProblem('gear', 'x', { quantity: -1 })).toMatch(/quantity/)
+    expect(blockProblem('gear', 'x', { quantity: 1.5 })).toMatch(/quantity/)
+    expect(blockProblem('gear', 5)).toMatch(/text/)
+  })
+  it('the database accepts the same block types', () => {
+    const dir = new URL('../../supabase/migrations/', import.meta.url)
+    const latest = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+      .map((f) => readFileSync(new URL(f, dir), 'utf8')).filter((t) => t.includes('sheet_blocks_type_check')).at(-1)!
+    const list = latest.slice(latest.indexOf('add constraint sheet_blocks_type_check'))
+    const types = [...list.slice(0, list.indexOf(');')).matchAll(/'([a-z]+)'/g)].map((m) => m[1])
+    expect(types).toEqual([...BLOCK_TYPES])
   })
   it('allows the same props per type as the database trigger', () => {
-    const sql = readFileSync(new URL('../../supabase/migrations/0001_schema.sql', import.meta.url), 'utf8')
+    // The newest migration that (re)defines validate_block is the one in force.
+    const dir = new URL('../../supabase/migrations/', import.meta.url)
+    const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    const sql = files.map((f) => readFileSync(new URL(f, dir), 'utf8')).filter((t) => t.includes('function private.validate_block()')).at(-1)!
     for (const t of BLOCK_TYPES) {
       const extra = PROPS_BY_TYPE[t].filter((k) => k !== 'hint')
       if (extra.length === 0) continue
