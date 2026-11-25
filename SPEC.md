@@ -28,7 +28,7 @@ A web app for running Fate RPG sessions (Fate Core, Fate Accelerated, Fate Conde
 
 | Concern | Choice |
 |---|---|
-| Build | Vite + React 18 + TypeScript (strict) |
+| Build | Vite + React 19 + TypeScript (strict) |
 | Styling | Tailwind CSS v4 (`@tailwindcss/vite`), `dark` variant switched by a class on `<html>` |
 | Routing | React Router (`react-router-dom`) |
 | Backend | Supabase: Postgres, anonymous auth, RLS, Realtime, RPCs, Vault |
@@ -51,7 +51,7 @@ There are no other dependencies. Icons are inline SVG. Toasts, bottom sheets, th
 ### 3.2 Codes
 - **Invite code**: 6 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no 0/O/1/I), e.g. `K7QPMX`. It is not secret; anyone with it can join as a player. Invite URL: `https://<host>/join/K7QPMX`.
 - **GM code**: chosen by the GM and typed into a textbox. **Entering a code that no session uses yet is how a session is created**; entering it again later, on any device, makes you that session's GM.
-  - **Normalisation** (client and server): trim, collapse inner whitespace to one space, lower-case. `Silver Order Falls` and `silver  order falls` are the same code.
+  - **Normalisation** (client and server): lower-case, treat any run of spaces, `-`, `_` or `.` as one space, trim. `Silver Order Falls`, `silver  order falls` and `silver-order-falls` are the same code.
   - **Strength rule** (checked in the client and again in the RPC): at least 10 characters after normalisation, not just one repeated character, and not on a short built-in blocklist (`password…`, `fatecore…`, `1234567890`, and so on). A **"Suggest one"** button fills in 4 random words from a word list bundled in the app, e.g. `ember-lantern-otter-quarry`, which gives about 41 bits of entropy.
   - **Uniqueness**: a code belongs to exactly one session (unique index on its hash).
   - **Storage**: only `hmac(normalised_code, pepper, 'sha256')` is stored, in `session_secrets`, which no client role can read. The pepper is a random 32-byte secret that the migration creates in Supabase Vault (`gm_code_pepper`); it is never in a table.
@@ -336,7 +336,7 @@ So:
 
 | Function | Mode | Behaviour |
 |---|---|---|
-| `create_session(p_gm_code text, p_name text, p_display_name text, p_color text default null) returns table(session_id uuid, invite_code text)` | definer | Normalises the code and enforces the strength rule (`weak_gm_code`). Generates a unique invite code. Inserts the session, the secret (peppered HMAC) and a GM member row. If the hash already exists, it raises `gm_code_taken` (a race) and the client retries `claim_gm`. It also creates a first narrative scene, "Scene 1", and makes it active. |
+| `create_session(p_gm_code text, p_name text, p_display_name text, p_color text default null) returns jsonb` (`{ session_id, invite_code }`) | definer | Normalises the code and enforces the strength rule (`weak_gm_code`). Generates a unique invite code. Inserts the session, the secret (peppered HMAC) and a GM member row. If the hash already exists, it raises `gm_code_taken` (a race) and the client retries `claim_gm`. It also creates a first narrative scene, "Scene 1", and makes it active. |
 | `claim_gm(p_gm_code text) returns uuid` | definer | Checks the rate limit (`rate_limited`), normalises and hashes the code, then looks it up. **No match**: records an attempt and returns `null`. **Match**: upserts the member as `gm` (`display_name` defaults to 'GM') and returns `session_id`. |
 | `change_gm_code(p_session_id uuid, p_new_code text) returns void` | definer | GM only. Strength and uniqueness checks, then replaces the hash. |
 | `join_session(p_invite_code text, p_display_name text, p_color text default null) returns uuid` | definer | Raises `invalid_invite` if the code matches nothing. Inserts the member as `player` with `p_color`, or the first unused palette colour. A repeat join updates the name and colour and keeps the role. |
@@ -346,6 +346,7 @@ So:
 
 | Function | Behaviour |
 |---|---|
+| `create_character(p_session_id uuid, p_sheet jsonb) returns uuid` | Creates a PC (owned by the caller) or an NPC (GM only), with its sections and blocks from a §5.6-format sheet, in one transaction. |
 | `patch_block(p_character_id uuid, p_block_id text, p_patch jsonb) returns sheet_blocks` | Applies any of `label`, `value`, `type`, `section_id`, `position`; `props` is shallow-merged (`props || patch.props`). Raises `block_not_found`. Every edit to an existing block goes through this, so the offline queue has one operation shape. |
 | `set_stress_box(p_character_id uuid, p_block_id text, p_index int, p_checked boolean) returns sheet_blocks` | Sets one box, so toggles from two people don't clobber each other. |
 | `adjust_block_value(p_character_id uuid, p_block_id text, p_delta numeric) returns sheet_blocks` | Atomic increment for `skill`, `counter` and `number`. Counters are clamped to `0..props.max`. |
@@ -372,7 +373,7 @@ So:
 
 Plain create, update and delete of scenes, zones, aspects and tokens, and switching the active scene (`update sessions set active_scene_id`), are ordinary table writes under RLS.
 
-Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `invalid_invite`, `weak_gm_code`, `gm_code_taken`, `rate_limited`, `invalid_spotlight`, `block_not_found`, `invalid_block`, `section_not_empty` or `invalid_scene`. The client maps them to plain-language messages.
+Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `not_allowed`, `not_found`, `invalid_input`, `invalid_invite`, `weak_gm_code`, `gm_code_taken`, `rate_limited`, `invalid_spotlight`, `block_not_found`, `invalid_block`, `section_not_empty`, `invalid_scene`, `sheet_limit` or `server_misconfigured`. Internal helpers live in a `private` schema, which the Data API doesn't expose. The client maps them to plain-language messages.
 
 ---
 
@@ -789,6 +790,7 @@ scripts/rls-test.mjs
     - `set_spotlight` on another session's aspect raises `invalid_spotlight`.
 
   It prints PASS/FAIL per check and exits non-zero on any failure. Anonymous sign-ins must be enabled.
+- **Local SQL RLS test** (`npm run test:rls:local`): the same checks in plain SQL (`supabase/tests/rls.sql`), run against a throwaway local Postgres with a small shim for Supabase's auth/vault/realtime pieces (`supabase/tests/supabase-shim.sql`). No Supabase project is needed.
 - Manual test scripts for each slice are in PLAN.md.
 
 ---
