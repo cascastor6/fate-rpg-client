@@ -286,7 +286,7 @@ function Felt({ zoom, enabled, draggingAspect, children }: { zoom: number; enabl
           className={`pointer-events-none absolute inset-x-0 top-4 z-[20000] mx-auto w-fit rounded-full px-5 py-2 text-xl font-bold shadow-lg ${deleting ? 'bg-red-600 text-white' : 'bg-black/60 text-white'}`}
           aria-live="polite"
         >
-          {deleting ? 'Release to delete this aspect' : 'Drop on the open table to delete · on a zone or the tray to move'}
+          {deleting ? 'Release to delete this aspect' : 'Drop on the open table to delete · on a zone or Scene-wide to move'}
         </p>
       )}
     </div>
@@ -410,6 +410,8 @@ function Chip({ aspect, actions, activeId }: { aspect: SceneAspectRow; actions?:
                 onClick={() => actions.spot!.toggle(aspect.id)} aria-pressed={!!lit}
                 aria-label={`${lit ? 'Clear highlight on' : 'Highlight for everyone:'} ${aspect.text}`}>★</button>
             )}
+            <button type="button" className="flex size-10 items-center justify-center rounded text-2xl leading-none text-stone-400 hover:bg-red-50 hover:text-red-700"
+              onClick={() => actions.deleteAspect(aspect)} aria-label={`Delete aspect ${aspect.text}`} title="Delete">×</button>
           </span>
         ) : aspect.free_invokes > 0 && (
           <span className="rounded bg-amber-100 px-1 text-xs tabular-nums" title="Free invokes">{aspect.free_invokes}</span>

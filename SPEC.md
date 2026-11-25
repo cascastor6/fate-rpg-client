@@ -670,7 +670,7 @@ Layout:
   - **Move**: drag the title bar. It is free-positioned with no snapping, clamped to the board, and saved on drop. The dragged zone comes to the front (`bring_to_front`).
   - **Resize**: drag the bottom-right corner handle (minimum 160 × 120, saved on release).
   - Rename, recolour, and delete. Deleting keeps the zone's aspects, which move to the Unzoned tray.
-- **Deleting an aspect from the board:** drag its chip out of its zone onto the open table (the felt). While a chip is dragged, the felt shows a hint. Over the felt it turns red and says "Release to delete this aspect". Dropping deletes the aspect, and an Undo toast restores it with the same id, zone, invokes and position. Dropping on a zone moves the chip there; dropping on the scene-wide tray (shown above the board) makes it scene-wide.
+- **Deleting an aspect from the board:** every chip (in a zone or Scene-wide) has a **×** button (GM), with Undo. Or drag the chip onto the open table (the felt), which works from a zone or from Scene-wide. While a chip is dragged, the felt shows a hint. Over the felt it turns red and says "Release to delete this aspect". Dropping deletes the aspect, and an Undo toast restores it with the same id, zone, invokes and position. Dropping on a zone moves the chip there; dropping on the scene-wide tray (shown above the board) makes it scene-wide.
 - **Aspects in zones**:
   - Add one inside a zone with "+ Aspect".
   - Each chip shows its text and free invokes −/+.
