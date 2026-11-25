@@ -252,7 +252,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
   if (state.kind === 'loading') return <FullScreenSpinner label="Opening session…" />
   if (state.kind === 'error') {
     return (
-      <main className="mx-auto flex max-w-screen-sm flex-col gap-4 px-4 py-10">
+      <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-sm flex-col gap-4 px-4 py-10">
         <Notice tone="error">{state.message}</Notice>
         <div className="flex gap-2">
           <Button onClick={() => { setState({ kind: 'loading' }); void load() }}>Try again</Button>

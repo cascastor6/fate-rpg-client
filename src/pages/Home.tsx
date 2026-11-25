@@ -8,6 +8,7 @@ import { ensureAnonymousUser, isConfigured, supabase } from '../lib/supabase.ts'
 import { ColorPicker } from '../ui/ColorPicker.tsx'
 import type { PlayerColor } from '../ui/colors.ts'
 import { Button, Card, Notice, TextField } from '../ui/primitives.tsx'
+import { ThemeSwitch } from '../ui/ThemeSwitch.tsx'
 
 export default function Home() {
   const location = useLocation()
@@ -22,7 +23,7 @@ export default function Home() {
   }, [])
 
   return (
-    <main className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Fate Table</h1>
         <p className="mt-1 text-[color:var(--muted)]">Run Fate Core, Accelerated and Condensed sessions together.</p>
@@ -48,6 +49,7 @@ export default function Home() {
           <GmCard />
         </>
       )}
+      <footer className="mt-auto pt-6"><ThemeSwitch /></footer>
     </main>
   )
 }

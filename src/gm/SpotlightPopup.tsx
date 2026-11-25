@@ -45,7 +45,7 @@ export function SpotlightPopup() {
         className="flex w-full max-w-sm flex-col items-center gap-3 rounded-3xl border-4 bg-[color:var(--card)] px-6 py-7 text-center shadow-2xl"
         style={{ borderColor: c.fill, boxShadow: `0 0 0 6px ${c.fill}33, 0 25px 50px -12px rgba(0,0,0,.4)` }}
       >
-        <p className="text-sm font-bold uppercase tracking-widest" style={{ color: c.fill }}>★ The GM highlights</p>
+        <p className="text-sm font-bold uppercase tracking-widest"><span style={{ color: c.fill }} aria-hidden="true">★ </span>The GM highlights</p>
         <p id="spotlight-text" className="text-2xl font-bold leading-snug">{s.text}</p>
         <p className="text-[color:var(--muted)]">
           {spotlightSubtitle(s, uid)}

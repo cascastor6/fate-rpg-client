@@ -235,6 +235,8 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
 ---
 
 ## Slice 8: Mobile/PWA: wake lock, offline queue, shake, haptics, toasts, big result
+
+> **Skipped at the user's request.** None of this is built: no service worker or install, no persisted offline queue (edits made offline are still queued in memory and retried), no wake lock, shake, extra haptics or big result view. SPEC §7.7 and §9.2–9.4 describe it if it's picked up later.
 **Build**
 - `vite-plugin-pwa`: manifest, icons, a service worker, and the update toast.
 - Persistent cache and queue, the offline banner, and the reconnect flush → refetch sequence (§9.3), covering sheet and GM scene/board edits. Rolling is disabled offline.

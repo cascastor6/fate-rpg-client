@@ -16,7 +16,8 @@ import { useSheet } from '../sheet/useSheet.ts'
 import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { colorOf } from '../ui/colors.ts'
 import { IconDie, IconMenu, IconMinus, IconPencil, IconPlus } from '../ui/icons.tsx'
-import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
+import { Button, Notice } from '../ui/primitives.tsx'
+import { SheetSkeleton } from '../ui/Skeleton.tsx'
 import { Stepper } from '../ui/Stepper.tsx'
 import { toast } from '../ui/toast.tsx'
 import { BottomBar } from './BottomBar.tsx'
@@ -47,12 +48,12 @@ function SheetPage({ characterId }: { characterId: string }) {
   const [tools, setTools] = useState(false)
   const [templates, setTemplates] = useState(false)
 
-  if (snapshot.status === 'loading') return <FullScreenSpinner label="Loading sheet…" />
+  if (snapshot.status === 'loading') return <><SessionHeader tabs={!isGm} /><SheetSkeleton /></>
   if (snapshot.status !== 'ready') {
     return (
       <>
         <SessionHeader tabs back={isGm ? `/s/${session.id}/gm` : `/s/${session.id}/table`} />
-        <main className="mx-auto max-w-screen-sm px-4 py-6">
+        <main id="main" tabIndex={-1} className="mx-auto max-w-screen-sm px-4 py-6">
           <Notice tone="error">
             {snapshot.status === 'missing' ? 'This character doesn’t exist, or you can’t see it.' : snapshot.message}
           </Notice>
@@ -97,7 +98,7 @@ function SheetPage({ characterId }: { characterId: string }) {
   return (
     <>
       <SessionHeader tabs={!isGm} subtitle={isGm ? 'GM view' : undefined} back={isGm ? `/s/${session.id}/gm` : '/'} />
-      <main className="mx-auto flex max-w-screen-sm flex-col gap-3 px-3 pt-4 pb-28">
+      <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-sm flex-col gap-3 px-3 pt-4 pb-28">
         <div className="flex items-start gap-3 px-1">
           <span className="mt-1.5 size-4 shrink-0 rounded-full" style={{ background: ownerColor.fill }} aria-hidden="true" />
           <div className="min-w-0 flex-1">

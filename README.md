@@ -122,6 +122,8 @@ PGHOST=localhost PGUSER=postgres npm run test:rls:local
 
 ## Troubleshooting
 
+- **"The database is out of date for this version of the app"**: a new migration hasn't been applied. Run `npm run db:push`, then reload.
+- **Light / dark mode**: follows your device by default. Change it on the home page or in ☰ Menu → You.
 - **Changes don't show up live in the other window.** Migration `0004_realtime.sql` adds the tables to the `supabase_realtime` publication. Check **Database → Publications → supabase_realtime** lists `sessions`, `session_members`, `characters`, `sheet_sections`, `sheet_blocks` (and the rest). Reloading always shows the latest data.
 - **"Could not find the function … in the schema cache"** or **"Something in that form isn't valid"** right after pulling: a new migration hasn't been applied. Run `npm run db:push`.
 

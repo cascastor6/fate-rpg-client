@@ -794,6 +794,13 @@ scripts/rls-test.mjs
 ---
 
 ## 12. Theming, accessibility and errors
+_As built (Slice 9):_
+- **Theme:** Light / Dark / Auto switch on the home page and in the menu (Your settings), stored in `fate.theme`.
+- **Player colours:** never used as text colour, because several fail 4.5:1 on one background or the other. Names show in normal text with a coloured dot.
+- **Keyboard and motion:** "Skip to content" link, a visible `:focus-visible` ring everywhere, and `prefers-reduced-motion` honoured globally.
+- **Errors:** a top-level error boundary, plain-language messages (a missing function/table/column says "run `npm run db:push`"), and skeleton placeholders while sheets and cards load.
+- **Load size:** screens are code-split (lazy routes); the largest chunk is about 300 kB (84 kB gzip).
+
 - Theme: light / dark / system (default system), stored in localStorage. Colours are CSS variables used by Tailwind.
 - Text contrast is at least 4.5:1, focus rings are visible, rolls and spotlights are announced in an `aria-live` region, and the board is keyboard-operable (§8.3.3).
 - Empty states: no PCs yet (GM sees the invite), empty section, no rolls, no scenes, no active scene, no NPCs.

@@ -23,7 +23,7 @@ export default function ScenePage() {
   return (
     <>
       <SessionHeader tabs />
-      <main className="mx-auto flex max-w-screen-lg flex-col gap-3 px-3 pt-4 pb-28">
+      <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-lg flex-col gap-3 px-3 pt-4 pb-28">
         {!activeId ? (
           <p className="rounded-2xl border border-dashed border-[color:var(--border)] p-8 text-center text-[color:var(--muted)]">
             The GM hasn’t shared a scene yet.

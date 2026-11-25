@@ -84,7 +84,7 @@ export default function JoinPage() {
   if (state.kind === 'loading') return <FullScreenSpinner label="Finding session…" />
 
   return (
-    <main className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
       <Link to="/" className="text-sm text-[color:var(--muted)] underline-offset-4 hover:underline">← Fate Table</Link>
 
       {state.kind === 'invalid' && (
