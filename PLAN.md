@@ -67,6 +67,7 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
 - `/s/:id/new-character` picker → insert character + sections + blocks → sheet page.
 - Play mode for all 9 block types, collapsible section cards, the fate point header, and a basic bottom bar (fate points −/+; Roll is a placeholder).
 - Read-only rendering for sheets you can't edit.
+- Skill rows show their pressable roll style, with the pencil for editing (the roll itself is wired in Slice 6).
 - Bottom-sheet editor. Optimistic per-block operations (`patch_block`, `adjust_block_value`, `set_stress_box`, `adjust_fate_points`) through the in-memory queue (§6.3; persisted in Slice 8).
 - Player **Table** tab listing the other PCs (opens them read-only). The GM can open and edit any PC from the placeholder GM screen.
 - Unit tests: validation, templates, positions.
@@ -118,7 +119,7 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
 ## Slice 6: 4dF roller, synced CSS 3D animation, ladder, roll log
 **Build**
 - `ladder.ts`, the seeded PRNG, `Dice3D` (deterministic tumble, reduced-motion fallback), dice in the roller's colour (§7.8).
-- Tap a skill to roll. The Roll dialog (plain, skill, bonus) → `roll_dice`; the roller animates from the response and the realtime copy is de-duplicated.
+- Press a skill row to roll it (§6.1); the pencil edits it. The Roll dialog (plain, skill, bonus) → `roll_dice`; the roller animates from the response and the realtime copy is de-duplicated.
 - The floating 4dF button (§7.5) on every session screen.
 - Open/closed GM rolls (§7.9): the toolbar toggle, the per-roll switch, face-down placeholders for players, and Reveal.
 - Roll log drawer for everyone.
@@ -126,9 +127,10 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
 
 **Test (two browsers)**:
 - **Synced rolls**:
-  - B taps Fight (+3). Both windows tumble onto *identical* faces with identical text (e.g. "Bea: +1 Fight +3 = Great (+4)"), matching the `rolls` row.
+  - B presses the Fight row (+3). Both windows tumble onto *identical* faces with identical text (e.g. "Bea: +1 Fight +3 = Great (+4)"), matching the `rolls` row.
   - Reload: history shows without replaying.
   - Reduced motion shows the fade fallback.
+  - Pressing a skill row rolls immediately. Pressing the pencil on the same row opens the editor and doesn't roll. Rapid double presses give one roll. B pressing a skill on A's read-only sheet does nothing. The GM pressing B's skill on B's card rolls it as "GM · <B's character>".
 - **Floating button**:
   - Tap it on B's sheet and on A's GM screen, and both animate everywhere.
   - A fast double-tap gives only one roll.
@@ -185,7 +187,7 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
   - keyboard moves
 - **NPC roster** (§8.3.5):
   - NPC template cards with inline name, aspects and fillable skills, plus **+ Aspect** / **+ Skill**
-  - roll from a skill, star to spotlight
+  - press a skill to roll it (pencil to edit), star to spotlight
   - duplicate, delete, reorder, search
   - **Show to players**, Add to scene, open full sheet, export/import
 - Player **Scene** tab (§8.3.4): the active scene read-only (list or board with zoom/pan). Visible NPCs appear in the player's Table tab.

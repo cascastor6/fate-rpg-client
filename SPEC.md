@@ -476,11 +476,15 @@ Templates live in client code (`src/sheet/templates.ts`) and generate fresh ids 
 - Single column, one card per section, with tappable headers to collapse. Skill sections with more than 8 blocks are collapsed by default on phones.
 - Tapping a value opens a **bottom sheet** with a large input:
   - text, aspect, consequence → textarea; image → URL field.
-  - skill, number, counter → big −/+ steppers and a numeric field.
+  - number, counter → big −/+ steppers and a numeric field.
 - Stress boxes toggle on tap. Counters show inline −/+.
-- Tapping a skill's name or die icon rolls (§7). Long-press, or the pencil icon, edits it.
+- **Press a skill to roll it.** The whole skill row (name and rating) is one big roll button. Tapping anywhere on it immediately rolls 4dF + that skill with bonus 0 (§7). There is no confirm step and no menu.
+  - A small **pencil button** at the row's right edge (its own 44 px target, separated so it isn't hit by accident) opens the bottom-sheet editor: −/+ steppers for the rating and a field for the name.
+  - While a roll is in flight, skill rows ignore taps, just like the floating button, so a double-tap gives one roll.
+  - The row shows a pressed state and a small die glyph so it's clearly rollable. Skills with `rollable: false` behave like a number block: tapping opens the editor.
+  - In edit mode, tapping a skill doesn't roll; the drag handle and settings take over.
 - Every touch target is at least 44 × 44 px.
-- **Read-only** when viewing someone else's sheet: the same layout with no edit affordances, and skills can't be rolled.
+- **Read-only** when viewing someone else's sheet: the same layout with no edit affordances, and skill rows aren't buttons, since you can't roll another player's skill. The GM *can* press any PC's or NPC's skill to roll it, and the roll is logged as "GM · <name>".
 
 ### 6.2 Edit mode
 - Toggled from the menu (only on sheets you can edit).
@@ -520,7 +524,7 @@ Rolling needs a connection; the Roll button and the floating button are disabled
 Ladder (`src/dice/ladder.ts`, unit-tested): −2 Terrible, −1 Poor, 0 Mediocre, +1 Average, +2 Fair, +3 Good, +4 Great, +5 Superb, +6 Fantastic, +7 Epic, +8 Legendary. Below −2 it reads "Terrible (−n)"; above +8 it reads "Legendary +k (n)".
 
 ### 7.4 Roll dialog
-The sticky bar's **Roll** opens a sheet with: Plain 4dF, a searchable list of rollable skills, and a bonus stepper (−5…+5). For GMs it also lists NPCs' skills and has an Open/Closed switch. Tapping a skill on a sheet or an NPC card rolls it with bonus 0.
+The sticky bar's **Roll** opens a sheet with: Plain 4dF, a searchable list of rollable skills, and a bonus stepper (−5…+5). For GMs it also lists NPCs' skills and has an Open/Closed switch. Pressing a skill on a sheet, a GM card or an NPC card rolls it straight away with bonus 0. Use this dialog when you need a bonus.
 
 ### 7.5 Floating 4dF button
 - A 56 px circular button on every session screen for every member. **One tap = a plain 4dF roll.**
@@ -650,7 +654,7 @@ Layout:
 - **NPC card** (compact, edited in place):
   - The name field.
   - Aspects: tap to edit, tap to spotlight via the star icon. **+ Aspect** adds another.
-  - Skills: the label and value are both editable in place, e.g. type "Fight" and set +2. Tap the die to roll. **+ Skill** adds another.
+  - Skills: **press the skill to roll it**, as on sheets. The pencil opens a small editor for the name and rating, e.g. "Fight" +2. **+ Skill** adds another and opens that editor straight away, because a blank skill needs a name. A skill with an empty name shows "Unnamed skill" and can still be rolled.
   - Every card is expandable this way with no edit mode. "Open full sheet" gives the normal sheet editor, so the GM can add stress, consequences or any other block type when an NPC needs it.
 - **Roster actions**:
   - Card actions: New NPC, duplicate (quick minions: "Thug", "Thug 2"…), delete, and drag to reorder.
