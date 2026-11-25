@@ -479,6 +479,22 @@ Templates live in client code (`src/sheet/templates.ts`) and generate fresh ids 
   - A PC made from a GM template gets fresh block ids, and records the template's base (`core`, `blank`, …) in `characters.template`.
 - **What's blocked:** template skills can't be rolled, and template blocks can't be spotlighted. Templates don't appear in the Table tab or the GM's character list.
 
+### 5.8 Deleting characters and sessions
+- **Delete a character:** Sheet tools (in edit mode), with a confirm step. Available on any PC or NPC the user can edit: the owner of a PC, or the GM for anything. Templates use their own "Delete template" button.
+  - It's an ordinary `DELETE` on `characters` under RLS. Its sections and blocks cascade.
+  - Rolls keep their history (`character_id` becomes null). Board tokens stay as plain markers (`character_id` becomes null).
+  - Afterwards a player is sent to "Create your character"; the GM goes back to the GM screen.
+- **Delete a session:** GM only, in Members → Danger zone, with a confirm step that lists what will go.
+  - First, all the session's templates are downloaded as one `<session>-templates.fate.json` bundle:
+    ```json
+    { "format": "fate-table-templates", "version": 1, "session_name": "…", "exported_at": "…",
+      "templates": [ { …§5.6 sheet…, "kind": "template", "offered": true } ] }
+    ```
+  - Then the app runs `DELETE FROM sessions WHERE id = …` (RLS: GM only). Everything else is removed in the database by `ON DELETE CASCADE`: members, the GM-code hash, characters and their sheets, rolls, scenes and their zones, aspects and tokens, and events. The local SQL test checks that no rows of the session remain in any table.
+  - The GM code is free to reuse. Players get their membership DELETE over realtime and are sent home.
+  - Anonymous users in `auth.users` are not removed; they hold no game data.
+- **Import templates** (GM screen → Templates card) accepts a bundle or a single §5.6 sheet. It creates each as a template with fresh ids and restores `offered`.
+
 ### 5.6 Export/import (`.fate.json`)
 ```json
 { "format": "fate-table-sheet", "version": 1, "kind": "pc", "name": "Sir Aldric", "template": "core",
@@ -654,6 +670,7 @@ Layout:
   - **Move**: drag the title bar. It is free-positioned with no snapping, clamped to the board, and saved on drop. The dragged zone comes to the front (`bring_to_front`).
   - **Resize**: drag the bottom-right corner handle (minimum 160 × 120, saved on release).
   - Rename, recolour, and delete. Deleting keeps the zone's aspects, which move to the Unzoned tray.
+- **Deleting an aspect from the board:** drag its chip out of its zone onto the open table (the felt). While a chip is dragged, the felt shows a hint. Over the felt it turns red and says "Release to delete this aspect". Dropping deletes the aspect, and an Undo toast restores it with the same id, zone, invokes and position. Dropping on a zone moves the chip there; dropping on the scene-wide tray (shown above the board) makes it scene-wide.
 - **Aspects in zones**:
   - Add one inside a zone with "+ Aspect".
   - Each chip shows its text and free invokes −/+.

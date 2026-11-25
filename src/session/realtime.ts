@@ -12,6 +12,9 @@ export type SessionTable = (typeof SESSION_TABLES)[number] | 'sessions'
 export type Change = { table: SessionTable; type: ChangeType; row: Record<string, unknown> }
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting'
 
+/** Sessions this device is leaving or deleting on purpose: ignore our own "removed" event. */
+export const leavingSessions = new Set<string>()
+
 export function openSessionChannel(
   sessionId: string,
   handlers: {

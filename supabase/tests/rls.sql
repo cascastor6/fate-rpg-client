@@ -217,4 +217,31 @@ select set_config('request.jwt.claims', :B, false); set role authenticated;
 select t_ok((select count(*) from characters where id = :'tpl') = 0, 'other session cannot see the template');
 reset role;
 
+-- Deleting characters and sessions
+select set_config('request.jwt.claims', :A2, false); set role authenticated;
+select t_ok(t_rows($$delete from public.characters where id = '$$ || :'c1' || $$'$$) = 0, 'a player cannot delete another player''s character');
+select t_ok(t_rows($$delete from public.sessions where id = '$$ || :'sa' || $$'$$) = 0, 'a player cannot delete the session');
+reset role;
+select set_config('request.jwt.claims', :GM, false); set role authenticated;
+select t_ok(t_rows($$delete from public.characters where id = '$$ || :'npc' || $$'$$) = 1, 'GM deletes a character (NPC)');
+reset role;
+select t_ok((select count(*) from sheet_blocks where character_id = :'npc') = 0, 'deleting a character deletes its sheet');
+select t_ok((select count(*) from scene_tokens where character_id is null and label = 'Thug') >= 1 and (select count(*) from scene_tokens where character_id = :'npc') = 0, 'its board tokens stay as plain markers');
+select count(*) > 0 as had_rows from rolls where session_id = :'sa' \gset
+select set_config('request.jwt.claims', :GM, false); set role authenticated;
+select t_ok(t_rows($$delete from public.sessions where id = '$$ || :'sa' || $$'$$) = 1, 'GM deletes the session');
+reset role;
+select t_ok(
+  (select count(*) from sessions where id = :'sa') + (select count(*) from session_secrets where session_id = :'sa')
+  + (select count(*) from session_members where session_id = :'sa') + (select count(*) from characters where session_id = :'sa')
+  + (select count(*) from sheet_sections where session_id = :'sa') + (select count(*) from sheet_blocks where session_id = :'sa')
+  + (select count(*) from rolls where session_id = :'sa') + (select count(*) from scenes where session_id = :'sa')
+  + (select count(*) from scene_zones where session_id = :'sa') + (select count(*) from scene_aspects where session_id = :'sa')
+  + (select count(*) from scene_tokens where session_id = :'sa') + (select count(*) from session_events where session_id = :'sa') = 0,
+  'session delete removes every row of that session from every table');
+select t_ok((select count(*) from sessions where id = :'sb') = 1, 'other sessions are untouched');
+select set_config('request.jwt.claims', :GM, false); set role authenticated;
+select t_ok((public.create_session('ember lantern otter quarry', 'Again', 'Sam')) ->> 'session_id' is not null, 'the freed GM code can start a new session');
+reset role;
+
 select 'ALL DONE' as result;

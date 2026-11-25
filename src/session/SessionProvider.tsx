@@ -9,7 +9,7 @@ import { upsertRow, type RemoteChange } from '../sheet/remote.ts'
 import { getDiceStore } from '../dice/store.ts'
 import { getScenesStore } from '../scenes/store.ts'
 import { peekSheetStore, resyncSheets } from '../sheet/store.ts'
-import { openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
+import { leavingSessions, openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
 import { toast } from '../ui/toast.tsx'
 import { SCENE_ASPECT_COLUMNS, type Member, type SceneAspectRow, type SessionRow } from './types.ts'
 
@@ -134,8 +134,9 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         case 'session_members': {
           if (row.session_id !== sessionId) return
           if (c.type === 'DELETE' && row.user_id === uid) {
+            if (leavingSessions.has(sessionId)) return
             clearLastSession(sessionId)
-            navigate('/', { replace: true, state: { notice: 'You’re no longer in that session. The GM may have removed you.' } })
+            navigate('/', { replace: true, state: { notice: 'You’re no longer in that session. The GM removed you or deleted the session.' } })
             return
           }
           setState((prev) => {
@@ -235,9 +236,13 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         )
       },
       async leave() {
+        leavingSessions.add(sessionId)
         const { error } = await supabase.from('session_members').delete()
           .eq('session_id', sessionId).eq('user_id', state.uid)
-        if (error) throw error
+        if (error) {
+          leavingSessions.delete(sessionId)
+          throw error
+        }
         clearLastSession(sessionId)
         navigate('/', { replace: true, state: { notice: `You left “${state.session.name}”.` } })
       },

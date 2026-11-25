@@ -211,9 +211,53 @@ export function SheetToolsSheet({ data, send, onClose }: { data: SheetData; send
             <Button variant="secondary" busy={busy} onClick={() => void saveAsTemplate()}>Save a copy as template</Button>
           </section>
         )}
+        {c.kind !== 'template' && <DeleteCharacter data={data} onClose={onClose} />}
         {error && <Notice tone="error">{error}</Notice>}
       </div>
     </BottomSheet>
+  )
+}
+
+/** Delete a PC or NPC (owner or GM; RLS decides). Templates have their own Delete button. */
+function DeleteCharacter({ data, onClose }: { data: SheetData; onClose: () => void }) {
+  const { isGm, session, refresh } = useSession()
+  const navigate = useNavigate()
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const c = data.character
+  const run = async () => {
+    setBusy(true)
+    setError(null)
+    const { data: rows, error: err } = await supabase.from('characters').delete().eq('id', c.id).select('id')
+    if (err || !rows?.length) {
+      setError(err ? friendlyError(err) : 'You can’t delete this character.')
+      setBusy(false)
+      return
+    }
+    await refresh()
+    onClose()
+    navigate(isGm ? `/s/${session.id}/gm${c.kind === 'npc' ? '/scenes' : ''}` : `/s/${session.id}/new-character`, { replace: true })
+  }
+  return (
+    <section className="flex flex-col gap-2 rounded-xl border border-red-300 p-3 dark:border-red-900">
+      <h3 className="font-semibold text-red-800 dark:text-red-300">Delete {c.kind === 'npc' ? 'NPC' : 'character'}</h3>
+      {!confirm ? (
+        <Button variant="ghost" className="self-start text-red-700 dark:text-red-400" onClick={() => setConfirm(true)}>Delete {c.name}…</Button>
+      ) : (
+        <>
+          <p className="text-sm">
+            Delete <strong>{c.name}</strong> and its whole sheet? Roll history stays, and any board token becomes a plain marker.
+            {' '}This can’t be undone; export it first if you might want it back.
+          </p>
+          {error && <Notice tone="error">{error}</Notice>}
+          <div className="flex gap-2">
+            <Button variant="danger" busy={busy} onClick={() => void run()}>Delete</Button>
+            <Button variant="secondary" onClick={() => setConfirm(false)}>Keep</Button>
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 
