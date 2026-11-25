@@ -112,7 +112,7 @@ Section references (§) point to SPEC.md.
 **Build**
 - `vite-plugin-pwa`: manifest, icons, a service worker, and an update-available toast.
 - Persistent cache and queue in localStorage, an offline banner, and the reconnect flush → refetch sequence (§9.3). Roll is disabled while offline.
-- Wake lock toggle, shake-to-roll enable button (with the iOS permission prompt), vibration on landing, the polished toast system, and the full-screen big result view (§7.6).
+- Wake lock toggle, shake-to-roll enable button (with the iOS permission prompt), vibration on landing, the polished toast system, and the full-screen big result view (SPEC §7.7).
 - Sticky bottom bar and floating 4dF button finalised (safe areas, menu contents, disabled while offline).
 
 **Test**: Lighthouse (DevTools) PWA installability check, then install on Android (Chrome) or iOS (Share → Add to Home Screen) from an HTTPS URL (see the note on HTTPS below). Turn on airplane mode, make 3 edits (the banner shows "3 changes waiting"), reload while still offline (the sheet renders from cache), reconnect (changes sync, and the GM browser sees them). Wake lock: the screen stays on with the toggle on. Shake: tap enable → accept the iOS prompt → shake → a roll happens. Android vibrates on landing. A GM award shows a toast on the phone. After any roll the phone shows the big result, and a tap dismisses it.
