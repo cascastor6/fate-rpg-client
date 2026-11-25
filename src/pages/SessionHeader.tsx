@@ -45,6 +45,7 @@ export function SessionHeader({ subtitle, back = '/', tabs = false }: { subtitle
             My sheet
           </NavLink>
           <NavLink to={`/s/${session.id}/table`} className={tab}>Table</NavLink>
+          <NavLink to={`/s/${session.id}/scene`} className={tab}>Scene</NavLink>
         </nav>
       )}
     </header>

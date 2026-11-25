@@ -6,7 +6,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase.ts'
 import type { ChangeType } from '../sheet/remote.ts'
 
-export const SESSION_TABLES = ['session_members', 'characters', 'sheet_sections', 'sheet_blocks', 'rolls', 'scenes', 'scene_aspects', 'session_events'] as const
+export const SESSION_TABLES = ['session_members', 'characters', 'sheet_sections', 'sheet_blocks', 'rolls', 'scenes', 'scene_zones', 'scene_aspects', 'scene_tokens', 'session_events'] as const
 export type SessionTable = (typeof SESSION_TABLES)[number] | 'sessions'
 
 export type Change = { table: SessionTable; type: ChangeType; row: Record<string, unknown> }

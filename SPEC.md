@@ -650,7 +650,7 @@ Layout:
   - Pinch and pan are handled with pointer events; no library.
   - All stored coordinates are in board units, so the layout is identical on every screen size.
 - **Zones** are index cards: a title bar (which is the drag handle), an optional colour, a list of aspect chips, and "+ Aspect".
-  - **Add zone** drops a 300 × 200 card in the centre of the current view.
+  - **Add zone** drops a 360 × 240 card in the centre of the current view. Text on the board is sized in board units, large enough to read at the 40–60% zoom of phones and the GM's middle column.
   - **Move**: drag the title bar. It is free-positioned with no snapping, clamped to the board, and saved on drop. The dragged zone comes to the front (`bring_to_front`).
   - **Resize**: drag the bottom-right corner handle (minimum 160 × 120, saved on release).
   - Rename, recolour, and delete. Deleting keeps the zone's aspects, which move to the Unzoned tray.
@@ -658,9 +658,9 @@ Layout:
   - Add one inside a zone with "+ Aspect".
   - Each chip shows its text and free invokes −/+.
   - A chip can be dragged to another zone or to the **Unzoned tray** (a strip under the board for scene-level aspects). That updates `zone_id`.
-  - Within a zone, chips can be reordered by drag.
+  - Within a zone, chips keep the order they were added in. Reordering chips inside a zone is not built yet; reorder in the Narrative view, which edits the same aspects.
 - **Tokens** (PC and NPC markers):
-  - Round markers (40 board units) showing initials, with the full label on hover or long-press.
+  - Round markers (56 board units) showing initials, with the full label on hover or long-press.
   - PC tokens use the owner's colour. NPC and free tokens use their own colour (default slate) and get a small square badge so they're distinguishable from PCs.
   - **Add tokens** opens a picker of PCs, NPCs and "Free token…". **Add all PCs** places one token per PC. A character has at most one token per scene; the picker greys out ones already placed.
   - Drag anywhere: free positioning with **no snapping** and no zone-membership logic. A token simply sits on top of whatever zone it's dropped over. Saved on drop.

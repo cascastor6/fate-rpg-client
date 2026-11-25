@@ -7,6 +7,7 @@ import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
 import { CHARACTER_COLUMNS, type CharacterRow } from '../sheet/types.ts'
 import { upsertRow, type RemoteChange } from '../sheet/remote.ts'
 import { getDiceStore } from '../dice/store.ts'
+import { getScenesStore } from '../scenes/store.ts'
 import { peekSheetStore, resyncSheets } from '../sheet/store.ts'
 import { openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
 import { toast } from '../ui/toast.tsx'
@@ -116,6 +117,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
           })
           return
         case 'scene_aspects':
+          getScenesStore(sessionId).applyRemote(c.table, c.type, row)
           setState((prev) => {
             if (prev.kind !== 'ready') return prev
             if (c.type !== 'DELETE' && row.scene_id !== prev.session.active_scene_id) return prev
@@ -125,6 +127,9 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
           })
           return
         case 'scenes':
+        case 'scene_zones':
+        case 'scene_tokens':
+          getScenesStore(sessionId).applyRemote(c.table, c.type, row)
           return
         case 'session_members': {
           if (row.session_id !== sessionId) return
@@ -168,6 +173,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
           if (c.type === 'INSERT' && row.kind === 'visibility_changed' && table !== 'rolls') {
             void load()
             resyncSheets()
+            if (table === 'scenes') void getScenesStore(sessionId).load()
           }
           return
         }
@@ -198,6 +204,8 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         void load()
         resyncSheets()
         void getDiceStore(sessionId).load()
+        const scenes = getScenesStore(sessionId)
+        if (scenes.getSnapshot().loaded) void scenes.load()
       },
     })
   }, [uid, sessionId, navigate, load])
