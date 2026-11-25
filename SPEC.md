@@ -85,6 +85,7 @@ create table sessions (
   invite_code    text not null unique check (invite_code ~ '^[A-HJ-NP-Z2-9]{6}$'),
   gm_fate_points int  not null default 0 check (gm_fate_points >= 0),
   gm_roll_mode   text not null default 'open' check (gm_roll_mode in ('open','closed')),  -- §7.9
+  spotlight      jsonb,  -- what the GM is highlighting right now, or null (§8.1); written only by set_spotlight
   created_by     uuid references auth.users(id) on delete set null,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -235,11 +236,12 @@ So:
 | `set_sections(p_character_id uuid, p_sections jsonb) returns bigint` | invoker | Replaces the ordered sections list (rename, reorder, add). It rejects removing a section that still has blocks; the client moves or deletes them first. |
 | `replace_sheet(p_character_id uuid, p_sections jsonb, p_blocks jsonb, p_name text default null) returns bigint` | invoker | Whole-sheet write, used only by JSON import and "reset to template" after an explicit confirm. |
 | `assign_character(p_character_id uuid, p_user_id uuid) returns void` | definer | GM only. The target user must be a member of the same session. |
+| `set_spotlight(p_session_id uuid, p_character_id uuid default null, p_block_id text default null, p_scene_aspect_id uuid default null) returns jsonb` | definer | GM only. With all targets null it clears the spotlight. Otherwise the target must be in that session and be an `aspect` or `consequence` block with a non-empty value, or a scene aspect (`invalid_spotlight`). Writes `sessions.spotlight` with a server `set_at = now()` and the GM's `user_id`. Returns the new value. `spotlight` is not in the GM's column grant, so it can only change through this function. |
 | `reveal_roll(p_roll_id uuid) returns rolls` | definer | GM of the roll's session only. Sets `is_hidden = false`, `revealed_at = now()`. The row becomes visible to players under RLS and reaches them as a realtime UPDATE. |
 
 All block RPCs lock the character row (`update ... where id = $1`), so concurrent operations on one sheet are serialised. Each rebuilds the array with `jsonb_array_elements ... with ordinality` / `jsonb_agg ... order by`.
 
-Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `invalid_invite`, `weak_gm_code`, `gm_code_taken`, `rate_limited`, `block_not_found` or `invalid_block`. The client maps them to friendly messages.
+Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `invalid_invite`, `weak_gm_code`, `gm_code_taken`, `rate_limited`, `invalid_spotlight`, `block_not_found` or `invalid_block`. The client maps them to friendly messages.
 
 ---
 
@@ -455,6 +457,27 @@ On phones, after any roll lands, a full-screen overlay tinted with the roller's 
 
 ---
 
+### 8.1 Spotlight: GM highlights an aspect or consequence
+When the GM presses an aspect, a consequence or a scene aspect, it is highlighted on every screen in the session, so the GM can point at it while saying "I'm compelling that" or "that's your free invoke".
+
+**Data**: `sessions.spotlight`, set through `set_spotlight` (§4.4) and delivered by the existing `sessions` realtime subscription, so no new channel is needed. Because it is stored, a player who reloads or joins late still sees the current highlight.
+```json
+{ "kind": "block", "character_id": "8c1e…", "block_id": "b_7f3mqp0ze2", "set_at": "2026-11-25T20:14:03Z", "by": "a91f…" }
+{ "kind": "scene_aspect", "scene_aspect_id": "3d0a…", "set_at": "2026-11-25T20:15:40Z", "by": "a91f…" }
+```
+
+**GM side**
+- On the GM screen's character cards and in the scene aspects panel, **tapping an aspect or a filled consequence toggles the spotlight** on it. Editing those on a card moves to the pencil icon or a long-press.
+- On a full sheet opened by the GM, aspects and consequences get a small spotlight icon button, because tapping the value still edits it there.
+- Only one item is highlighted at a time. Pressing another moves the highlight, and pressing the highlighted one again clears it. A "Clear highlight" chip shows in the GM toolbar while one is active.
+- Empty aspects and empty consequence slots can't be highlighted.
+
+**Everyone's screens** (GM devices included)
+- The highlighted item gets a glowing ring in the GM's colour (§7.8) plus a gentle pulse, which is static under `prefers-reduced-motion`. Wherever it's visible: a player's own sheet, the read-only scene aspects panel (which auto-expands), sheets of other players opened read-only, and GM cards.
+- A **spotlight pill** pins under the header on every player screen, so it works even when the item isn't on the screen in front of you: "★ GM highlights: *Bruised Ribs*, Bea's mild consequence" or "★ GM highlights scene aspect: *On Fire*". Tapping it scrolls to the item when it's on your screen; otherwise it just shows the text.
+- When the highlight lands on **your own** sheet, the phone gives a short vibration (where supported) and the section holding it auto-expands and scrolls into view.
+- The highlight disappears when the GM clears it, moves it, or deletes the item. Clients also hide it after 10 minutes (`set_at` + 10 min) so a forgotten highlight doesn't linger.
+
 ## 9. Mobile and PWA
 
 ### 9.1 Layout
@@ -543,6 +566,7 @@ scripts/rls-test.mjs
   - A closed GM roll in session A is invisible to player A1 (0 rows); A1 does see the `hidden_roll` event. After `reveal_roll`, A1 can select it.
   - A player calling `roll_dice(..., p_hidden => true)` gets `not_gm`; a player can't call `reveal_roll` or change `gm_roll_mode`.
   - A player can change their own `color` but not another member's.
+  - A player calling `set_spotlight`, or updating `sessions.spotlight` directly, is refused; the GM's `set_spotlight` on an aspect in another session raises `invalid_spotlight`.
   It prints PASS/FAIL per check and exits non-zero on any failure. It needs anonymous sign-ins enabled on the project.
 - Manual test scripts for each slice are in PLAN.md.
 

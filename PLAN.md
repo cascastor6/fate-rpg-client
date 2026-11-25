@@ -101,10 +101,11 @@ Section references (§) point to SPEC.md.
 - Desktop grid of compact character cards (§8), with empty blocks collapsed and an expand chip. Stress toggles and award/take buttons on each card.
 - Phone: a scroll-snap swipe pager with dots and name chips.
 - Scene aspects panel (GM: add, edit, delete, reorder, free invokes −/+; players: read-only collapsible panel on the sheet).
+- Spotlight (SPEC §8.1): the GM taps an aspect or consequence (card or scene panel) or uses the spotlight icon on a full sheet → `set_spotlight`. Glow ring in the GM's colour everywhere, the spotlight pill on player screens, auto-scroll and vibration on the owner's phone, and a Clear chip.
 - GM fate point pool with "reset to N". Members panel: invite share, kick, assign character.
 - `session_events` subscription with basic toasts (moved to the polished toast system in Slice 8).
 
-**Test (two browsers + phone)**: The GM on desktop with 2 players (B, C) sees 2 cards updating live. Award B a point: B sees the counter change and a toast. Add a scene aspect "On Fire" with 1 free invoke: B and C see it read-only, and B can't edit it (UI hidden; a forced RPC is denied). Resize to 375 px: the GM view becomes swipeable cards. Kick C: C is sent back to the home page with a message.
+**Test (two browsers + phone)**: The GM on desktop with 2 players (B, C) sees 2 cards updating live. Award B a point: B sees the counter change and a toast. Add a scene aspect "On Fire" with 1 free invoke: B and C see it read-only, and B can't edit it (UI hidden; a forced RPC is denied). Resize to 375 px: the GM view becomes swipeable cards. Kick C: C is sent back to the home page with a message. Spotlight: the GM taps B's High Concept on B's card. Within about 1 s B's phone vibrates, scrolls to it and shows the glowing ring, and C sees the pill "GM highlights: … (Bea's high concept)". The GM taps the scene aspect "On Fire": the highlight moves for everyone. Reload C: the pill is still there. The GM taps "On Fire" again (or Clear): it's gone everywhere. A forced `set_spotlight` from B is denied.
 
 **You do**: nothing new.
 
