@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { signed } from '../dice/ladder.ts'
 import { useSession } from '../session/SessionProvider.tsx'
+import { EditSheet } from '../sheet/components/EditSheet.tsx'
+import { SheetToolsSheet } from '../sheet/components/EditSheets.tsx'
 import { SheetView } from '../sheet/components/SheetView.tsx'
 import type { SheetOpBody } from '../sheet/ops.ts'
 import type { BlockRow, CharacterRow } from '../sheet/types.ts'
@@ -10,6 +12,7 @@ import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { colorOf } from '../ui/colors.ts'
 import { IconDie, IconMenu, IconMinus, IconPencil, IconPlus } from '../ui/icons.tsx'
 import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
+import { Stepper } from '../ui/Stepper.tsx'
 import { toast } from '../ui/toast.tsx'
 import { BottomBar } from './BottomBar.tsx'
 import { SessionHeader } from './SessionHeader.tsx'
@@ -22,6 +25,8 @@ export default function SheetPage() {
   const { snapshot, enqueue } = useSheet(characterId)
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [tools, setTools] = useState(false)
 
   if (snapshot.status === 'loading') return <FullScreenSpinner label="Loading sheet…" />
   if (snapshot.status !== 'ready') {
@@ -41,6 +46,7 @@ export default function SheetPage() {
   const c = data.character
   const own = c.kind === 'pc' && c.owner_id === uid
   const canEdit = isGm || own
+  const editing = editMode && canEdit
   const owner = members.find((m) => m.user_id === c.owner_id)
   const ownerColor = colorOf(owner?.color)
 
@@ -71,19 +77,46 @@ export default function SheetPage() {
 
         {c.kind === 'pc' && (
           <div className="flex items-center gap-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm">
-            <span>
+            <span className="whitespace-nowrap">
               Fate Points <strong className="text-lg tabular-nums">{c.fate_points}</strong>
             </span>
             <span className="text-[color:var(--muted)]">·</span>
-            <span>
-              Refresh <strong className="text-lg tabular-nums">{c.refresh}</strong>
-            </span>
+            {editing ? (
+              <span className="ml-auto flex items-center gap-2">
+                Refresh
+                <Stepper label="refresh" value={c.refresh} min={0} onStep={(d) => enqueue({ kind: 'character', patch: { refresh: Math.max(0, c.refresh + d) } })} />
+              </span>
+            ) : (
+              <span>
+                Refresh <strong className="text-lg tabular-nums">{c.refresh}</strong>
+              </span>
+            )}
           </div>
+        )}
+
+        {canEdit && (
+          editing ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border-2 border-amber-600 bg-amber-50 px-3 py-2 dark:bg-amber-950/40">
+              <span className="flex-1 text-sm font-semibold">Editing layout: drag the dots to move, gear for settings</span>
+              <Button variant="secondary" onClick={() => setTools(true)}>Sheet tools</Button>
+              <Button onClick={() => setEditMode(false)}>Done</Button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button variant="ghost" className="text-sm" onClick={() => setEditMode(true)}>
+                <IconPencil className="size-4" /> Edit layout
+              </Button>
+            </div>
+          )
         )}
 
         {!canEdit && <Notice>You’re viewing {owner ? `${owner.display_name}’s` : 'this'} character. It’s read-only for you.</Notice>}
 
-        <SheetView data={data} canEdit={canEdit} canRoll={canEdit} send={enqueue} onRoll={onRoll} />
+        {editing ? (
+          <EditSheet data={data} send={enqueue} />
+        ) : (
+          <SheetView data={data} canEdit={canEdit} canRoll={canEdit} send={enqueue} onRoll={onRoll} />
+        )}
 
         {!canEdit && (
           <Link to={`/s/${session.id}/table`} className="self-start px-1 text-sm underline underline-offset-4">
@@ -98,7 +131,9 @@ export default function SheetPage() {
         ) : (
           <div className="flex-1" />
         )}
-        {canEdit && (
+        {editing ? (
+          <Button className="flex-1" onClick={() => setEditMode(false)}>Done editing</Button>
+        ) : canEdit && (
           <Button className="flex-1" onClick={() => toast('Rolling arrives with the dice in Slice 6.')}>
             <IconDie /> Roll
           </Button>
@@ -114,6 +149,7 @@ export default function SheetPage() {
       </BottomBar>
 
       <SessionMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      {tools && <SheetToolsSheet data={data} send={enqueue} onClose={() => setTools(false)} />}
       {renaming && <RenameSheet character={c} send={enqueue} onClose={() => setRenaming(false)} />}
     </>
   )

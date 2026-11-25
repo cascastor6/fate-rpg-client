@@ -2,7 +2,8 @@
 // local view and sent to the server in order; applyOp is pure so the view can be
 // recomputed as server rows arrive.
 
-import type { BlockProps, BlockRow, BlockValue, CharacterRow, SectionRow, StressBox } from './types.ts'
+import { byPosition } from '../lib/positions.ts'
+import type { BlockProps, BlockRow, BlockType, BlockValue, CharacterRow, SectionRow, SheetJson, StressBox } from './types.ts'
 
 export type SheetData = {
   character: CharacterRow
@@ -13,6 +14,9 @@ export type SheetData = {
 export type BlockPatch = {
   label?: string
   value?: BlockValue
+  type?: BlockType
+  section_id?: string
+  position?: number
   /** merged into props; a null value removes the key */
   props?: { [K in keyof BlockProps]?: BlockProps[K] | null }
 }
@@ -23,6 +27,14 @@ export type SheetOpBody =
   | { kind: 'adjust'; blockId: string; delta: number }
   | { kind: 'fate'; delta: number }
   | { kind: 'character'; patch: Partial<Pick<CharacterRow, 'name' | 'refresh'>> }
+  | { kind: 'insert_block'; block: BlockRow }
+  | { kind: 'delete_block'; blockId: string }
+  | { kind: 'insert_section'; section: SectionRow }
+  | { kind: 'patch_section'; sectionId: string; patch: Partial<Pick<SectionRow, 'title' | 'position'>> }
+  | { kind: 'delete_section'; sectionId: string; withBlocks: boolean }
+  | { kind: 'rebalance' }
+  /** whole-sheet write (import / apply template); rows are the optimistic preview */
+  | { kind: 'replace'; sheet: SheetJson; preview: { character: Partial<CharacterRow>; sections: SectionRow[]; blocks: BlockRow[] } }
 
 export type SheetOp = SheetOpBody & {
   opId: string
@@ -48,6 +60,9 @@ export function applyToBlock(b: BlockRow, op: SheetOpBody): BlockRow {
       return {
         ...b,
         label: op.patch.label ?? b.label,
+        type: op.patch.type ?? b.type,
+        section_id: op.patch.section_id ?? b.section_id,
+        position: op.patch.position ?? b.position,
         value: 'value' in op.patch ? (op.patch.value as BlockValue) : b.value,
         props: op.patch.props ? mergeProps(b.props, op.patch.props) : b.props,
       }
@@ -77,9 +92,37 @@ export function applyOp(data: SheetData, op: SheetOpBody): SheetData {
       return { ...data, character: { ...data.character, fate_points: Math.max(0, data.character.fate_points + op.delta) } }
     case 'character':
       return { ...data, character: { ...data.character, ...op.patch } }
+    case 'insert_block':
+      return { ...data, blocks: [...data.blocks.filter((b) => b.id !== op.block.id), op.block] }
+    case 'delete_block':
+      return { ...data, blocks: data.blocks.filter((b) => b.id !== op.blockId) }
+    case 'insert_section':
+      return { ...data, sections: [...data.sections.filter((s) => s.id !== op.section.id), op.section] }
+    case 'patch_section':
+      return { ...data, sections: data.sections.map((s) => (s.id === op.sectionId ? { ...s, ...op.patch } : s)) }
+    case 'delete_section':
+      if (!op.withBlocks && data.blocks.some((b) => b.section_id === op.sectionId)) return data
+      return {
+        ...data,
+        sections: data.sections.filter((s) => s.id !== op.sectionId),
+        blocks: data.blocks.filter((b) => b.section_id !== op.sectionId),
+      }
+    case 'rebalance':
+      return data
+    case 'replace':
+      return {
+        character: { ...data.character, ...op.preview.character },
+        sections: op.preview.sections,
+        blocks: op.preview.blocks,
+      }
     default:
       return { ...data, blocks: data.blocks.map((b) => (b.id === op.blockId ? applyToBlock(b, op) : b)) }
   }
+}
+
+/** Keep sections and blocks in display order after ops that move things. */
+export function sortSheet(data: SheetData): SheetData {
+  return { ...data, sections: [...data.sections].sort(byPosition), blocks: [...data.blocks].sort(byPosition) }
 }
 
 /**

@@ -1,5 +1,6 @@
 // Play-mode block renderers (SPEC §6.1). Every interactive target is at least 44px.
 
+import type { ReactNode } from 'react'
 import { ladderName, signed } from '../../dice/ladder.ts'
 import { IconDie, IconLock, IconMinus, IconPencil, IconPlus, IconRefresh } from '../../ui/icons.tsx'
 import type { SheetOpBody } from '../ops.ts'
@@ -27,7 +28,7 @@ function Label({ children }: { children: string }) {
 }
 
 /** A tappable area that opens the editor, or a plain div when read-only. */
-function EditArea({ a, block, children, className = '' }: { a: BlockActions; block: BlockRow; children: React.ReactNode; className?: string }) {
+function EditArea({ a, block, children, className = '' }: { a: BlockActions; block: BlockRow; children: ReactNode; className?: string }) {
   if (!a.canEdit) return <div className={`px-3 py-2 ${className}`}>{children}</div>
   return (
     <button type="button" className={`${tap} min-h-11 px-3 py-2 ${className}`} onClick={() => a.edit(block)} aria-label={`Edit ${block.label || block.type}`}>

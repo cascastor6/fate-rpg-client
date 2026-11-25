@@ -7,7 +7,7 @@ import { friendlyError, isNetworkError } from '../lib/errors.ts'
 import { byPosition } from '../lib/positions.ts'
 import { supabase } from '../lib/supabase.ts'
 import { toast } from '../ui/toast.tsx'
-import { applyOp, isDebounced, tryMerge, type SheetData, type SheetOp, type SheetOpBody } from './ops.ts'
+import { applyOp, isDebounced, sortSheet, tryMerge, type SheetData, type SheetOp, type SheetOpBody } from './ops.ts'
 import { BLOCK_COLUMNS, CHARACTER_COLUMNS, SECTION_COLUMNS, type BlockRow, type CharacterRow, type SectionRow } from './types.ts'
 
 export const DEBOUNCE_MS = 400
@@ -48,24 +48,13 @@ export class SheetStore {
   load(): Promise<void> {
     this.loading ??= (async () => {
       try {
-        const id = this.characterId
-        const [c, s, b] = await Promise.all([
-          supabase.from('characters').select(CHARACTER_COLUMNS).eq('id', id).maybeSingle<CharacterRow>(),
-          supabase.from('sheet_sections').select(SECTION_COLUMNS).eq('character_id', id).returns<SectionRow[]>(),
-          supabase.from('sheet_blocks').select(BLOCK_COLUMNS).eq('character_id', id).returns<BlockRow[]>(),
-        ])
-        const err = c.error ?? s.error ?? b.error
-        if (err) throw err
-        if (!c.data) {
+        const fresh = await this.fetchAll()
+        if (!fresh) {
           this.server = null
           this.set({ status: 'missing' })
           return
         }
-        this.server = {
-          character: c.data,
-          sections: (s.data ?? []).sort(byPosition),
-          blocks: (b.data ?? []).sort(byPosition),
-        }
+        this.server = fresh
         this.recompute()
       } catch (e) {
         if (!this.server) this.set({ status: 'error', message: friendlyError(e) })
@@ -74,6 +63,19 @@ export class SheetStore {
       }
     })()
     return this.loading
+  }
+
+  private async fetchAll(): Promise<SheetData | null> {
+    const id = this.characterId
+    const [c, s, b] = await Promise.all([
+      supabase.from('characters').select(CHARACTER_COLUMNS).eq('id', id).maybeSingle<CharacterRow>(),
+      supabase.from('sheet_sections').select(SECTION_COLUMNS).eq('character_id', id).returns<SectionRow[]>(),
+      supabase.from('sheet_blocks').select(BLOCK_COLUMNS).eq('character_id', id).returns<BlockRow[]>(),
+    ])
+    const err = c.error ?? s.error ?? b.error
+    if (err) throw err
+    if (!c.data) return null
+    return { character: c.data, sections: (s.data ?? []).sort(byPosition), blocks: (b.data ?? []).sort(byPosition) }
   }
 
   /** Apply an edit locally right away and queue it for the server. */
@@ -97,7 +99,7 @@ export class SheetStore {
 
   private recompute() {
     if (!this.server) return
-    const data = this.pending.reduce<SheetData>((d, op) => applyOp(d, op), this.server)
+    const data = sortSheet(this.pending.reduce<SheetData>((d, op) => applyOp(d, op), this.server))
     this.set({ status: 'ready', data, pending: this.pending.length, offline: this.offline })
   }
 
@@ -145,6 +147,7 @@ export class SheetStore {
   private async send(op: SheetOp) {
     const id = this.characterId
     const server = this.server!
+    // Note: 'rebalance' and 'replace' swap this.server for a fresh copy.
     const replaceBlock = (row: BlockRow) => {
       server.blocks = server.blocks.map((b) => (b.id === row.id ? row : b))
     }
@@ -172,6 +175,57 @@ export class SheetStore {
         const { data, error } = await supabase.rpc('adjust_fate_points', { p_character_id: id, p_delta: op.delta })
         if (error) throw error
         server.character = { ...server.character, fate_points: data as number }
+        return
+      }
+      case 'insert_block': {
+        const { character_id, id: bid, section_id, type, label, value, props, position } = op.block
+        const { data, error } = await supabase.from('sheet_blocks')
+          .insert({ character_id, id: bid, section_id, type, label, value, props, position })
+          .select(BLOCK_COLUMNS).single<BlockRow>()
+        if (error) throw error
+        server.blocks = [...server.blocks.filter((b) => b.id !== data.id), data]
+        return
+      }
+      case 'delete_block': {
+        const { error } = await supabase.from('sheet_blocks').delete().eq('character_id', id).eq('id', op.blockId)
+        if (error) throw error
+        server.blocks = server.blocks.filter((b) => b.id !== op.blockId)
+        return
+      }
+      case 'insert_section': {
+        const { id: sid, title, position } = op.section
+        const { data, error } = await supabase.from('sheet_sections')
+          .insert({ character_id: id, id: sid, title, position })
+          .select(SECTION_COLUMNS).single<SectionRow>()
+        if (error) throw error
+        server.sections = [...server.sections.filter((x) => x.id !== data.id), data]
+        return
+      }
+      case 'patch_section': {
+        const { data, error } = await supabase.from('sheet_sections').update(op.patch)
+          .eq('character_id', id).eq('id', op.sectionId).select(SECTION_COLUMNS).maybeSingle<SectionRow>()
+        if (error) throw error
+        if (!data) throw new Error('not_found')
+        server.sections = server.sections.map((x) => (x.id === data.id ? data : x))
+        return
+      }
+      case 'delete_section': {
+        const { error } = await supabase.rpc('delete_section', {
+          p_character_id: id, p_section_id: op.sectionId, p_with_blocks: op.withBlocks,
+        })
+        if (error) throw error
+        server.sections = server.sections.filter((x) => x.id !== op.sectionId)
+        server.blocks = server.blocks.filter((b) => b.section_id !== op.sectionId)
+        return
+      }
+      case 'rebalance':
+      case 'replace': {
+        const { error } = op.kind === 'rebalance'
+          ? await supabase.rpc('rebalance_positions', { p_character_id: id })
+          : await supabase.rpc('replace_sheet', { p_character_id: id, p_sheet: op.sheet })
+        if (error) throw error
+        const fresh = await this.fetchAll()
+        if (fresh) this.server = fresh
         return
       }
       case 'character': {
