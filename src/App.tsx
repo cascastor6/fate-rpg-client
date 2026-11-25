@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
-import GmHome from './pages/GmHome.tsx'
+import GmLayout from './gm/GmLayout.tsx'
+import PlayersTab from './gm/PlayersTab.tsx'
+import ScenesTab from './gm/ScenesTab.tsx'
 import Home from './pages/Home.tsx'
 import JoinPage from './pages/JoinPage.tsx'
 import NewCharacterPage from './pages/NewCharacterPage.tsx'
@@ -20,7 +22,10 @@ export default function App() {
           <Route path="new-character" element={<NewCharacterPage />} />
           <Route path="c/:characterId" element={<SheetPage />} />
           <Route path="table" element={<TablePage />} />
-          <Route path="gm" element={<GmOnly><GmHome /></GmOnly>} />
+          <Route path="gm" element={<GmOnly><GmLayout /></GmOnly>}>
+            <Route index element={<PlayersTab />} />
+            <Route path="scenes" element={<ScenesTab />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

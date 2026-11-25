@@ -35,12 +35,14 @@ export function SheetView({
   canRoll,
   send,
   onRoll,
+  spot,
 }: {
   data: SheetData
   canEdit: boolean
   canRoll: boolean
   send: (op: SheetOpBody) => void
   onRoll: (block: BlockRow) => void
+  spot?: BlockActions['spot']
 }) {
   const [editing, setEditing] = useState<string | null>(null)
   const { isCollapsed, toggle } = useCollapsed(data.character.id, data.sections, data.blocks)
@@ -60,6 +62,7 @@ export function SheetView({
     edit: (b) => setEditing(b.id),
     roll: onRoll,
     send,
+    spot,
   }
   const editingBlock = editing ? data.blocks.find((b) => b.id === editing) : undefined
 

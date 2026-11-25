@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, Outlet, useParams } from 'react-router-dom'
 import { DiceLayer } from '../dice/DiceLayer.tsx'
+import { SpotlightPopup } from '../gm/SpotlightPopup.tsx'
 import { SessionProvider, useSession } from '../session/SessionProvider.tsx'
 
 /** /s/:sessionId — loads the session (or bounces home) for everything below it. */
@@ -11,6 +12,7 @@ export default function SessionLayout() {
     <SessionProvider key={sessionId} sessionId={sessionId}>
       <Outlet />
       <DiceLayer />
+      <SpotlightPopup />
     </SessionProvider>
   )
 }

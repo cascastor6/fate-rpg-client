@@ -13,6 +13,30 @@ export type BlockActions = {
   /** press-to-roll a skill (wired to dice in Slice 6) */
   roll: (block: BlockRow) => void
   send: (op: SheetOpBody) => void
+  /** GM only: highlight an aspect/consequence for everyone (SPEC §8.2) */
+  spot?: { isLit: (b: BlockRow) => boolean; toggle: (b: BlockRow) => void; color: string }
+}
+
+/** The GM's ★ button beside a filled aspect or consequence, with a ring when lit. */
+function SpotWrap({ block, a, children }: { block: BlockRow; a: BlockActions; children: ReactNode }) {
+  const text = typeof block.value === 'string' ? block.value.trim() : ''
+  if (!a.spot || !text) return <>{children}</>
+  const lit = a.spot.isLit(block)
+  return (
+    <div className="flex items-stretch gap-1 rounded-xl" style={lit ? { outline: `3px solid ${a.spot.color}`, background: `${a.spot.color}14` } : undefined}>
+      <div className="min-w-0 flex-1">{children}</div>
+      <button
+        type="button"
+        onClick={() => a.spot!.toggle(block)}
+        aria-pressed={lit}
+        aria-label={`${lit ? 'Clear highlight on' : 'Highlight for everyone:'} ${block.label}`}
+        className={`flex w-11 shrink-0 items-center justify-center rounded-lg text-xl ${lit ? '' : 'text-[color:var(--muted)] opacity-60 hover:opacity-100'}`}
+        style={lit ? { color: a.spot.color } : undefined}
+      >
+        ★
+      </button>
+    </div>
+  )
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
@@ -280,9 +304,9 @@ export function SeparatorBlock({ block }: { block: BlockRow }) {
 
 export function BlockView({ block, a, canRoll }: { block: BlockRow; a: BlockActions; canRoll: boolean }) {
   switch (block.type) {
-    case 'aspect': return <AspectBlock block={block} a={a} />
+    case 'aspect': return <SpotWrap block={block} a={a}><AspectBlock block={block} a={a} /></SpotWrap>
     case 'text': return <TextBlock block={block} a={a} />
-    case 'consequence': return <ConsequenceBlock block={block} a={a} />
+    case 'consequence': return <SpotWrap block={block} a={a}><ConsequenceBlock block={block} a={a} /></SpotWrap>
     case 'skill': return <SkillBlock block={block} a={a} canRoll={canRoll} />
     case 'stress': return <StressBlock block={block} a={a} />
     case 'counter': return <CounterBlock block={block} a={a} />

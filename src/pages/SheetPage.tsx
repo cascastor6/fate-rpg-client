@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useDice } from '../dice/useDice.ts'
+import { useSpotlight } from '../gm/spotlight.ts'
 import { overlays } from '../ui/overlays.ts'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { friendlyError } from '../lib/errors.ts'
@@ -37,6 +38,7 @@ function SheetPage({ characterId }: { characterId: string }) {
   const [renaming, setRenaming] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const dice = useDice()
+  const spotlight = useSpotlight()
   // The floating roll button hides while the layout is being edited.
   useEffect(() => {
     overlays.setBusy(editMode)
@@ -174,7 +176,18 @@ function SheetPage({ characterId }: { characterId: string }) {
         {editing ? (
           <EditSheet data={data} send={enqueue} />
         ) : (
-          <SheetView data={data} canEdit={canEdit} canRoll={canEdit && !isTemplate} send={enqueue} onRoll={onRoll} />
+          <SheetView
+            data={data}
+            canEdit={canEdit}
+            canRoll={canEdit && !isTemplate}
+            send={enqueue}
+            onRoll={onRoll}
+            spot={isGm && !isTemplate ? {
+              isLit: (b) => spotlight.isBlockLit(c.id, b.id),
+              toggle: (b) => void spotlight.toggleBlock(c.id, b.id),
+              color: colorOf(members.find((m) => m.user_id === uid)?.color).fill,
+            } : undefined}
+          />
         )}
 
         {!canEdit && (

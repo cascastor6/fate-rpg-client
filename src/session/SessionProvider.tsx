@@ -9,7 +9,8 @@ import { upsertRow, type RemoteChange } from '../sheet/remote.ts'
 import { getDiceStore } from '../dice/store.ts'
 import { peekSheetStore, resyncSheets } from '../sheet/store.ts'
 import { openSessionChannel, type Change, type ConnectionState } from './realtime.ts'
-import type { Member, SessionRow } from './types.ts'
+import { toast } from '../ui/toast.tsx'
+import { SCENE_ASPECT_COLUMNS, type Member, type SceneAspectRow, type SessionRow } from './types.ts'
 
 type SessionContextValue = {
   uid: string
@@ -17,6 +18,8 @@ type SessionContextValue = {
   members: Member[]
   /** PCs, plus NPCs the caller may see (RLS), ordered by position */
   characters: CharacterRow[]
+  /** aspects of the active scene, in order */
+  sceneAspects: SceneAspectRow[]
   me: Member
   isGm: boolean
   /** realtime connection (SPEC §10) */
@@ -38,7 +41,7 @@ export function useSession(): SessionContextValue {
 type State =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; uid: string; session: SessionRow; members: Member[]; characters: CharacterRow[] }
+  | { kind: 'ready'; uid: string; session: SessionRow; members: Member[]; characters: CharacterRow[]; sceneAspects: SceneAspectRow[] }
 
 /**
  * Loads one session for the current anonymous user and keeps it live over realtime.
@@ -49,6 +52,8 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const loadedOnce = useRef(false)
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   /** Fetch everything. After the first load, failures keep the current state (e.g. offline). */
   const load = useCallback(async () => {
@@ -64,6 +69,13 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       if (s.error) throw s.error
       if (m.error) throw m.error
       if (c.error) throw c.error
+      let sceneAspects: SceneAspectRow[] = []
+      if (s.data?.active_scene_id) {
+        const a = await supabase.from('scene_aspects').select(SCENE_ASPECT_COLUMNS).eq('scene_id', s.data.active_scene_id)
+          .order('position').returns<SceneAspectRow[]>()
+        if (a.error) throw a.error
+        sceneAspects = a.data ?? []
+      }
       const me = m.data?.find((x) => x.user_id === uid)
       if (!s.data || !me) {
         // RLS hides sessions you're not in, so "missing" and "not a member" look the same.
@@ -78,7 +90,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         role: me.role,
         displayName: me.display_name,
       })
-      setState({ kind: 'ready', uid, session: s.data, members: m.data ?? [], characters: c.data ?? [] })
+      setState({ kind: 'ready', uid, session: s.data, members: m.data ?? [], characters: c.data ?? [], sceneAspects })
       loadedOnce.current = true
     } catch (e) {
       if (!loadedOnce.current) setState({ kind: 'error', message: friendlyError(e) })
@@ -97,8 +109,22 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       const row = c.row
       switch (c.table) {
         case 'sessions':
-          setState((prev) => prev.kind === 'ready' && (row.version as number) > prev.session.version
-            ? { ...prev, session: { ...prev.session, ...(row as SessionRow) } } : prev)
+          setState((prev) => {
+            if (prev.kind !== 'ready' || (row.version as number) <= prev.session.version) return prev
+            if (row.active_scene_id !== prev.session.active_scene_id) void load() // new scene: its aspects
+            return { ...prev, session: { ...prev.session, ...(row as SessionRow) } }
+          })
+          return
+        case 'scene_aspects':
+          setState((prev) => {
+            if (prev.kind !== 'ready') return prev
+            if (c.type !== 'DELETE' && row.scene_id !== prev.session.active_scene_id) return prev
+            const next = upsertRow(prev.sceneAspects, c.type, row as SceneAspectRow)
+            return next === prev.sceneAspects ? prev
+              : { ...prev, sceneAspects: [...next].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)) }
+          })
+          return
+        case 'scenes':
           return
         case 'session_members': {
           if (row.session_id !== sessionId) return
@@ -136,6 +162,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
           return
         case 'session_events': {
           getDiceStore(sessionId).applyRemote(c.table, c.type, row)
+          if (c.type === 'INSERT') eventToast(row)
           // Something became hidden from us (we can't receive its UPDATE), or visible: refetch.
           const table = (row.payload as { table?: string } | null)?.table
           if (c.type === 'INSERT' && row.kind === 'visibility_changed' && table !== 'rolls') {
@@ -144,6 +171,24 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
           }
           return
         }
+      }
+    }
+    // Toasts for things other people did (SPEC §9.4).
+    const eventToast = (row: Record<string, unknown>) => {
+      const prev = stateRef.current
+      if (prev.kind !== 'ready') return
+      const p = (row.payload ?? {}) as Record<string, unknown>
+      const amGm = prev.members.find((m) => m.user_id === uid)?.role === 'gm'
+      const target = prev.characters.find((ch) => ch.id === row.target_character_id)
+      if ((row.kind === 'fate_point_awarded' || row.kind === 'fate_point_taken') && target?.owner_id === uid) {
+        const n = Math.abs(Number(p.delta) || 1)
+        const what = n === 1 ? 'a fate point' : `${n} fate points`
+        toast(row.kind === 'fate_point_awarded' ? `The GM gave you ${what}.` : `The GM took ${what}.`)
+        navigator.vibrate?.(40)
+      } else if (row.kind === 'scene_aspect_added' && !amGm) {
+        toast(`New scene aspect: ${String(p.text ?? '')}`)
+      } else if (row.kind === 'member_joined' && amGm) {
+        toast(`${String(p.display_name ?? 'Someone')} joined.`)
       }
     }
     return openSessionChannel(sessionId, {
@@ -165,6 +210,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       session: state.session,
       members: state.members,
       characters: state.characters,
+      sceneAspects: state.sceneAspects,
       me,
       isGm: me.role === 'gm',
       connection,
