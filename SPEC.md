@@ -472,11 +472,20 @@ When the GM presses an aspect, a consequence or a scene aspect, it is highlighte
 - Only one item is highlighted at a time. Pressing another moves the highlight, and pressing the highlighted one again clears it. A "Clear highlight" chip shows in the GM toolbar while one is active.
 - Empty aspects and empty consequence slots can't be highlighted.
 
-**Everyone's screens** (GM devices included)
-- The highlighted item gets a glowing ring in the GM's colour (§7.8) plus a gentle pulse, which is static under `prefers-reduced-motion`. Wherever it's visible: a player's own sheet, the read-only scene aspects panel (which auto-expands), sheets of other players opened read-only, and GM cards.
-- A **spotlight pill** pins under the header on every player screen, so it works even when the item isn't on the screen in front of you: "★ GM highlights: *Bruised Ribs*, Bea's mild consequence" or "★ GM highlights scene aspect: *On Fire*". Tapping it scrolls to the item when it's on your screen; otherwise it just shows the text.
-- When the highlight lands on **your own** sheet, the phone gives a short vibration (where supported) and the section holding it auto-expands and scrolls into view.
-- The highlight disappears when the GM clears it, moves it, or deletes the item. Clients also hide it after 10 minutes (`set_at` + 10 min) so a forgotten highlight doesn't linger.
+**Player screens: a pop-up**
+- Every player gets a **pop-up card** over whatever they're looking at. Nothing scrolls, and no sections expand or move.
+  - A dimmed backdrop, with a centred card ringed in the GM's colour (§7.8).
+  - Header "★ The GM highlights".
+  - The aspect or consequence text in large type, e.g. *Bruised Ribs*.
+  - A subtitle saying whose it is: "Bea's mild consequence", "Your high concept", or "Scene aspect", plus free invokes if it has any.
+- **Dismiss**: tap anywhere or press OK; it also closes by itself after 8 s. A dismissed highlight doesn't pop up again on that device; this is tracked by `set_at` in localStorage.
+- **Changes**: if the GM moves the highlight, the open pop-up switches to the new item, or a new pop-up opens if it was closed. If the GM clears it or deletes the item, an open pop-up closes.
+- **Not interrupting**: if a bottom-sheet editor or the big roll result is open, the pop-up waits until it closes. The pop-up doesn't take keyboard focus away from an input.
+- **Late joiners / reload**: a highlight that is still active and not yet dismissed on that device pops up once.
+- **Your own item**: a short vibration as well, where supported.
+- Highlights older than 10 minutes (`set_at` + 10 min) are ignored, so a forgotten one doesn't pop up for someone joining later.
+
+**GM devices**: no pop-up. The highlighted item on the GM screen gets a ring in the GM's colour, and the toolbar's "Clear highlight" chip shows what's active.
 
 ## 9. Mobile and PWA
 
