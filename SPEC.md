@@ -55,7 +55,7 @@ No other runtime dependencies. Icons are inline SVG. Toasts, bottom sheets, the 
 
 ### 3.3 Flows
 1. **Create session** (`/` → "New session"): enter a session name and your display name → `create_session()` → the screen shows the GM code and invite link → continue to the GM screen.
-2. **Join** (`/join/:code`, or type the code on `/`): enter a display name → `join_session()` → the player picks a template and names their character on first entry → player sheet.
+2. **Join** (`/join/:code`, or type the code on `/`): enter a display name and pick a player colour (§7.8) → `join_session()` → the player picks a template and names their character on first entry → player sheet.
 3. **GM reclaim** (`/` → "I'm the GM"): enter the GM code → `claim_gm()` → GM screen. This works on any device. If that device's user was already a player in the session, they are promoted to GM. Several devices can be GM at once; reclaiming does not revoke the others.
 4. **Resume**: localStorage key `fate.last` = `{ sessionId, inviteCode, role, displayName }`. On launch, if it exists and the user is still a member (checked with a select on `session_members`), the app goes straight in. If not, the key is cleared and the home screen is shown.
 
@@ -77,6 +77,7 @@ create table sessions (
   name           text not null check (char_length(name) between 1 and 80),
   invite_code    text not null unique check (invite_code ~ '^[A-HJ-NP-Z2-9]{6}$'),
   gm_fate_points int  not null default 0 check (gm_fate_points >= 0),
+  gm_roll_mode   text not null default 'open' check (gm_roll_mode in ('open','closed')),  -- §7.9
   created_by     uuid references auth.users(id) on delete set null,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -94,6 +95,8 @@ create table session_members (
   user_id      uuid not null references auth.users(id) on delete cascade,
   role         text not null check (role in ('gm','player')),
   display_name text not null check (char_length(display_name) between 1 and 40),
+  color        text not null default 'slate' check (color in
+                 ('red','orange','amber','lime','green','teal','cyan','blue','indigo','violet','pink','slate')),  -- §7.8
   joined_at    timestamptz not null default now(),
   primary key (session_id, user_id)
 );
@@ -124,6 +127,9 @@ create table rolls (
   user_id      uuid references auth.users(id) on delete set null,
   character_id uuid references characters(id) on delete set null,
   roller_name  text not null,           -- display name snapshot
+  roller_color text not null,           -- colour snapshot, so old log entries keep their colour
+  is_hidden    boolean not null default false,  -- closed GM roll (§7.9)
+  revealed_at  timestamptz,
   label        text,                    -- e.g. 'Fight', null for a plain roll
   skill_value  int  not null default 0, -- read server-side from the skill block
   bonus        int  not null default 0, -- extra modifier the roller entered
@@ -151,7 +157,7 @@ create table session_events (
   id                  uuid primary key default gen_random_uuid(),
   session_id          uuid not null references sessions(id) on delete cascade,
   kind                text not null check (kind in
-                        ('scene_aspect_added','fate_point_awarded','fate_point_taken','member_joined')),
+                        ('scene_aspect_added','fate_point_awarded','fate_point_taken','member_joined','hidden_roll')),
   target_character_id uuid references characters(id) on delete cascade,
   payload             jsonb not null default '{}'::jsonb,
   created_at          timestamptz not null default now()
@@ -179,11 +185,11 @@ is_session_gm(p_session_id uuid)     returns boolean  -- auth.uid() has role 'gm
 
 | Table | SELECT | INSERT | UPDATE | DELETE |
 |---|---|---|---|---|
-| `sessions` | `is_session_member(id)` | — (RPC only) | `is_session_gm(id)`; column grant limited to `name`, `gm_fate_points` | `is_session_gm(id)` |
+| `sessions` | `is_session_member(id)` | — (RPC only) | `is_session_gm(id)`; column grant limited to `name`, `gm_fate_points`, `gm_roll_mode` | `is_session_gm(id)` |
 | `session_secrets` | — | — | — | — (no policies; all privileges revoked from `anon` and `authenticated`) |
-| `session_members` | `is_session_member(session_id)` | — (RPC only) | own row (`user_id = auth.uid()`); column grant limited to `display_name` | own row (leave) or `is_session_gm(session_id)` (kick) |
+| `session_members` | `is_session_member(session_id)` | — (RPC only) | own row (`user_id = auth.uid()`); column grant limited to `display_name`, `color` | own row (leave) or `is_session_gm(session_id)` (kick) |
 | `characters` | `is_session_member(session_id)` | member, and `owner_id = auth.uid()` or `is_session_gm(session_id)` | `owner_id = auth.uid()` or `is_session_gm(session_id)`; `WITH CHECK` same, plus the trigger guards `session_id`/`owner_id` | same as UPDATE |
-| `rolls` | `is_session_member(session_id)` | — (RPC only, so results can't be forged) | — | — |
+| `rolls` | `is_session_member(session_id) and (not is_hidden or is_session_gm(session_id))`, so players never receive closed GM rolls, not even over realtime | — (RPC only, so results can't be forged) | — (reveal goes through `reveal_roll`) | — |
 | `scene_aspects` | `is_session_member(session_id)` | `is_session_gm(session_id)` | `is_session_gm(session_id)` | `is_session_gm(session_id)` |
 | `session_events` | `is_session_member(session_id)` | — (RPC/trigger only) | — | — |
 
@@ -199,10 +205,10 @@ So:
 
 | Function | Mode | Behaviour |
 |---|---|---|
-| `create_session(p_name text, p_display_name text) returns table(session_id uuid, invite_code text, gm_code text)` | definer | Requires `auth.uid()`. Generates a unique invite code (retries on collision) and a 12-character secret. Inserts the `sessions` row, the `session_secrets` row (bcrypt hash of the secret) and a `session_members` row with role `gm`. Returns the plaintext GM code; this is the only time it ever exists. |
-| `join_session(p_invite_code text, p_display_name text) returns uuid` | definer | Looks up the session by normalised code and raises `invalid_invite` if none. Inserts the member as `player`. If already a member, updates `display_name` and keeps the role. Returns `session_id`. |
+| `create_session(p_name text, p_display_name text, p_color text default null) returns table(session_id uuid, invite_code text, gm_code text)` | definer | Requires `auth.uid()`. Generates a unique invite code (retries on collision) and a 12-character secret. Inserts the `sessions` row, the `session_secrets` row (bcrypt hash of the secret) and a `session_members` row with role `gm` (with `p_color`, default `slate`). Returns the plaintext GM code; this is the only time it ever exists. |
+| `join_session(p_invite_code text, p_display_name text, p_color text default null) returns uuid` | definer | Looks up the session by normalised code and raises `invalid_invite` if none. Inserts the member as `player`. If `p_color` is null it assigns the first palette colour nobody in the session uses yet. If already a member, updates `display_name` (and `color` if given) and keeps the role. Returns `session_id`. |
 | `claim_gm(p_gm_code text) returns uuid` | definer | Splits the code into its invite prefix and secret, finds the session, and compares `crypt(secret, hash) = hash`. On failure it raises `invalid_gm_code` (a generic error that doesn't reveal whether the prefix existed). On success it upserts the member with role `gm`; `display_name` defaults to 'GM' if new. Returns `session_id`. |
-| `roll_dice(p_session_id uuid, p_character_id uuid default null, p_block_id text default null, p_bonus int default 0, p_label text default null) returns rolls` | definer | Requires membership. If `p_block_id` is given, the character must be in the session and either owned by the caller or the caller is GM; `skill_value` is read from that skill block and `label` defaults to its label. `p_bonus` is clamped to -20..20. Each face is `floor(random()*3)::int - 1`. Inserts the row and returns it. |
+| `roll_dice(p_session_id uuid, p_character_id uuid default null, p_block_id text default null, p_bonus int default 0, p_label text default null, p_hidden boolean default null) returns rolls` | definer | Requires membership. Snapshots the caller's `display_name` and `color`. **Hidden:** a non-GM passing `p_hidden = true` gets `not_gm`. For a GM, `null` means use `sessions.gm_roll_mode`. A hidden roll also inserts a `hidden_roll` session event with `payload: { roll_id, roller_name, roller_color }` and no result, so players know a roll happened. If `p_block_id` is given, the character must be in the session and either owned by the caller or the caller is GM; `skill_value` is read from that skill block and `label` defaults to its label. `p_bonus` is clamped to -20..20. Each face is `floor(random()*3)::int - 1`. Inserts the row and returns it. |
 | `adjust_fate_points(p_character_id uuid, p_delta int) returns int` | invoker | Atomic `fate_points = greatest(0, fate_points + p_delta)`, under RLS (owner or GM). Returns the new value. If the caller is a GM and not the owner, it also inserts a `session_events` row (`fate_point_awarded` / `fate_point_taken`, `payload: { delta }`). Creating the event needs definer rights, so the event insert lives in a small internal definer helper. |
 | `adjust_gm_pool(p_session_id uuid, p_delta int) returns int` | invoker | Atomic `gm_fate_points = greatest(0, gm_fate_points + p_delta)`, GM only through RLS. |
 | `update_block(p_character_id uuid, p_block_id text, p_patch jsonb) returns bigint` | invoker | Shallow-merges `p_patch` into the one block with that id (`block || patch`). `id` and `type` are stripped from the patch. Raises `block_not_found`. Returns the new `version`. Two people editing different blocks, or different fields of one block, never overwrite each other. |
@@ -214,6 +220,7 @@ So:
 | `set_sections(p_character_id uuid, p_sections jsonb) returns bigint` | invoker | Replaces the ordered sections list (rename, reorder, add). It rejects removing a section that still has blocks; the client moves or deletes them first. |
 | `replace_sheet(p_character_id uuid, p_sections jsonb, p_blocks jsonb, p_name text default null) returns bigint` | invoker | Whole-sheet write, used only by JSON import and "reset to template" after an explicit confirm. |
 | `assign_character(p_character_id uuid, p_user_id uuid) returns void` | definer | GM only. The target user must be a member of the same session. |
+| `reveal_roll(p_roll_id uuid) returns rolls` | definer | GM of the roll's session only. Sets `is_hidden = false`, `revealed_at = now()`. The row becomes visible to players under RLS and reaches them as a realtime UPDATE. |
 
 All block RPCs lock the character row (`update ... where id = $1`), so concurrent operations on one sheet are serialised. Each rebuilds the array with `jsonb_array_elements ... with ordinality` / `jsonb_agg ... order by`.
 
@@ -370,6 +377,7 @@ Rolling needs a connection; the Roll button and the floating 4dF button (§7.5) 
 
 ### 7.2 Animation (CSS 3D)
 - Four cubes (`transform-style: preserve-3d`), each with faces `+`, `+`, blank, blank, `−`, `−` on opposite pairs.
+- The cubes are drawn in the roller's colour (`rolls.roller_color`, §7.8), so everyone can tell at a glance whose roll is tumbling.
 - Each die's final rotation is the face's base rotation plus whole extra turns (`360° × n`) on X and Y, plus a small Z jitter. A PRNG seeded from the roll `id` and the die index picks the turns and jitter, so every client shows the same tumble as well as the same result.
 - About 1.4 s with `cubic-bezier(.2,.7,.2,1)` and a 60 ms stagger per die. `prefers-reduced-motion` skips the tumble and shows the faces with a fade.
 - When the last die lands: `navigator.vibrate?.([30, 40, 30])` if available (feature-detected, which means a no-op on iOS), then the result appears.
@@ -392,19 +400,38 @@ The sticky bar's **Roll** button opens a sheet with: "Plain 4dF", a searchable l
 - The bottom bar's **Roll** button stays: it opens the roll dialog for skill rolls, while the floating button is the fast plain roll.
 
 ### 7.6 Roll log
-A right-hand drawer on desktop and a bottom drawer on phones, opened from the header or menu. It loads the latest 50 rolls on open, then appends live. Each entry shows the roller, faces as mini dice, the breakdown, the ladder result and a relative time. Everyone in the session sees it.
+A right-hand drawer on desktop and a bottom drawer on phones, opened from the header or menu. It loads the latest 50 rolls on open, then appends live. Each entry shows the roller (name in their colour), faces as mini dice in the roller's colour, the breakdown, the ladder result and a relative time. Everyone in the session sees it.
 
 ### 7.7 Big result view
-On phones, after any roll lands, a full-screen overlay shows the total and ladder name in huge type with the roller's name and skill, so the phone can be shown to the table. It closes on tap or after 4 s, and the roller can pin it open. It can be turned off for other people's rolls in settings.
+On phones, after any roll lands, a full-screen overlay tinted with the roller's colour shows the total and ladder name in huge type with the roller's name and skill, so the phone can be shown to the table. It closes on tap or after 4 s, and the roller can pin it open. It can be turned off for other people's rolls in settings.
 
 ---
+
+### 7.8 Player colours
+- Every member, GM included, has a colour from a fixed palette of 12: red, orange, amber, lime, green, teal, cyan, blue, indigo, violet, pink, slate. The palette uses keys, not hex values, so each one maps to a light and a dark shade pair in `src/ui/colors.ts` that keeps the die faces readable (at least 4.5:1 contrast between face and symbol) in both themes.
+- **Picking**: a swatch row on the join screen and on create session, with the first unused colour pre-selected. Colours already taken in the session show a small initial, but they can still be chosen; duplicates are allowed, just discouraged. It can be changed any time from the menu (an `update` on your own `session_members` row).
+- **Where it shows**: the dice (§7.2), the roll log, the big result view, an accent stripe on the player's sheet header and bottom bar, the border of their card on the GM screen, and the member list.
+- Each roll stores `roller_color` as a snapshot, so changing colour later doesn't recolour old log entries.
+
+### 7.9 Open and closed GM rolls
+- **Session setting** `sessions.gm_roll_mode`: `open` (default) or `closed`. A GM toolbar toggle labelled "GM rolls: Open / Closed" sets it; it is saved and shared by every GM device.
+- **Per-roll override**: the roll dialog (§7.4), when the GM opens it, has an "Open / Closed" switch preset from the session setting. The floating button (§7.5) always uses the session setting, and shows a small eye-slash badge when it is set to closed.
+- **Open GM roll**: works like any other roll; everyone sees it animate and in the log.
+- **Closed GM roll**:
+  - Only GM devices receive the `rolls` row; RLS hides it from players, realtime included. GMs see the normal animation and a log entry marked "Hidden".
+  - Players receive only the `hidden_roll` event. They see a short animation of four face-down dice in the GM's colour that never resolve, and a log entry "GM rolled behind the screen", with no faces, total or skill.
+  - Players' phones show no big result view for it.
+- **Reveal**: a hidden log entry on the GM side has a "Reveal" button that calls `reveal_roll`. Players then receive the real row. Their placeholder entry, matched by `roll_id`, turns into the full result, the dice animate onto the real faces, and a "Revealed" tag shows.
+- Players' own rolls are always open.
 
 ## 8. GM screen
 
 - **Desktop (≥ 1024 px)**: a responsive grid (`grid-cols-[repeat(auto-fill,minmax(280px,1fr))]`) with one compact card per character. Each card shows the character and player name, fate points with −/+ (award/take), all aspects, stress tracks (boxes toggle in place), filled consequences, and an "N empty" chip that expands the empty ones. Empty blocks are collapsed. "Open sheet" opens the full sheet with GM edit rights.
 - **Phone**: a horizontal scroll-snap pager with one card per character, swipeable, with dots and name chips to jump between them. No library.
 - **Scene aspects panel**: a list of scene/situation aspects, each with a free-invoke counter (−/+). The GM can add, edit, delete and drag to reorder. Players see the same panel read-only, collapsible above their sheet.
-- **Floating 4dF button** (§7.5) for quick GM rolls; GM rolls appear in everyone's log and animate for everyone.
+- **Floating 4dF button** (§7.5) for quick GM rolls, which follow the open/closed setting (§7.9).
+- **GM roll mode toggle**: Open / Closed in the toolbar (§7.9).
+- Character cards have a border in the owning player's colour (§7.8).
 - **GM fate point pool**: a big counter in the GM toolbar with −/+ and a "Reset to N" helper (N = number of PCs, the usual scene start).
 - **Award/take**: −/+ on each card calls `adjust_fate_points(character, ±1)`. That inserts a `session_events` row, and the player gets a toast ("The GM gave you a fate point").
 - **Members**: the invite link with copy and share (`navigator.share` when available), the list of members and their roles, kick, and "assign character to…".
@@ -496,6 +523,9 @@ scripts/rls-test.mjs
   - A player cannot create or edit scene aspects.
   - The GM of A can update A1's character and adjust its fate points, and cannot read session B.
   - `claim_gm` rejects a wrong secret.
+  - A closed GM roll in session A is invisible to player A1 (0 rows); A1 does see the `hidden_roll` event. After `reveal_roll`, A1 can select it.
+  - A player calling `roll_dice(..., p_hidden => true)` gets `not_gm`; a player can't call `reveal_roll` or change `gm_roll_mode`.
+  - A player can change their own `color` but not another member's.
   It prints PASS/FAIL per check and exits non-zero on any failure. It needs anonymous sign-ins enabled on the project.
 - Manual test scripts for each slice are in PLAN.md.
 

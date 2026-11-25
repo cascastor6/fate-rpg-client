@@ -33,11 +33,11 @@ Section references (§) point to SPEC.md.
 **Build**
 - Home screen with: resume card, New session, Join with code, I'm the GM.
 - Create flow → "Save your GM code" screen (copy and share, an "I've saved it" confirm) → `/s/:id/gm` (a placeholder GM screen listing members).
-- `/join/:code` → display name → `/s/:id` (a placeholder player screen).
+- `/join/:code` → display name + colour swatches (SPEC §7.8) → `/s/:id` (a placeholder player screen). Create session also has a colour picker. Colour change in the menu.
 - GM reclaim with the GM code. `fate.last` resume logic, and "Leave session".
 - `SessionProvider` (initial fetch only; no realtime yet). Error mapping for `invalid_invite` and `invalid_gm_code`.
 
-**Test (two browsers)**: A creates a session and notes the codes → B opens the invite link, joins as "Bea" → A reloads and sees Bea in the member list. B reloads and goes straight back in. C (a third private window) enters the GM code and lands on the GM screen. A wrong GM code shows a friendly error. A wrong invite shows "No session with that code".
+**Test (two browsers)**: A creates a session and notes the codes → B opens the invite link, joins as "Bea", accepts the pre-selected unused colour (different from A's) → A reloads and sees Bea in the member list with her colour. B reloads and goes straight back in. C (a third private window) enters the GM code and lands on the GM screen. A wrong GM code shows a friendly error. A wrong invite shows "No session with that code".
 
 **You do**: nothing new.
 
@@ -85,10 +85,12 @@ Section references (§) point to SPEC.md.
 **Build**
 - `ladder.ts`, the seeded PRNG, the `Dice3D` component (4 cubes, deterministic tumble, reduced-motion fallback).
 - Tap a skill to roll. The Roll button opens the roll dialog (plain, skill or bonus) → `roll_dice` RPC → the animation plays from the response, and the realtime copy is de-duplicated.
+- Dice, log entries and the big result in the roller's colour (SPEC §7.8).
+- Open/closed GM rolls (SPEC §7.9): the session toggle, a per-roll switch in the GM's roll dialog, face-down placeholders for players, and Reveal.
 - Floating 4dF button (SPEC §7.5) on the sheet and the GM screen: one tap does a plain roll, long-press opens the roll dialog, and it is locked while a roll is in flight.
 - Every client animates new rolls. The result line matches §7.3. A roll log drawer (latest 50 + live) is available to everyone, including the GM screen.
 
-**Test (two browsers)**: B taps Fight (+3). Both windows tumble and land on *identical* faces, and the result text is the same in both (e.g. "+1 Fight +3 = Great (+4)", depending on what the server decided). Check that the log entry matches the `rolls` row in the table editor. Reload A: the log shows history without replaying animations. Turn on reduced motion in the OS or DevTools and check the fade fallback. Check boundary ladder text by temporarily giving a skill +8. Floating button: tap it on B's sheet and on A's GM screen; both windows animate both rolls. Double-tapping it fast produces only one roll. Long-press opens the dialog. At 375 px it sits above the bottom bar and doesn't cover the fate point or menu buttons.
+**Test (two browsers)**: B taps Fight (+3). Both windows tumble and land on *identical* faces, and the result text is the same in both (e.g. "+1 Fight +3 = Great (+4)", depending on what the server decided). Check that the log entry matches the `rolls` row in the table editor. Reload A: the log shows history without replaying animations. Turn on reduced motion in the OS or DevTools and check the fade fallback. Check boundary ladder text by temporarily giving a skill +8. Floating button: tap it on B's sheet and on A's GM screen; both windows animate both rolls. Double-tapping it fast produces only one roll. Colours: B (blue) and A (red) roll; both windows show blue and red dice and log names respectively. B changes colour to green: new rolls are green, old log entries stay blue. Closed GM rolls: A switches to Closed and taps the floating button. A sees the result marked Hidden; B sees face-down dice and "GM rolled behind the screen". In B's DevTools Network/WS frames, no faces arrive. A taps Reveal, and B's entry animates to the real result. Per-roll override: with Closed set, A opens the dialog, switches to Open and rolls, and B sees it normally. Long-press opens the dialog. At 375 px it sits above the bottom bar and doesn't cover the fate point or menu buttons.
 
 **You do**: nothing new.
 
@@ -134,6 +136,6 @@ Section references (§) point to SPEC.md.
 ---
 
 ## Cross-cutting
-- **RLS test** written in Slice 1 and extended whenever a new table or RPC appears; re-run at the end of slices 2, 3, 7 and 9.
+- **RLS test** written in Slice 1 and extended whenever a new table or RPC appears; re-run at the end of slices 2, 3, 6, 7 and 9 (Slice 6 adds the hidden-roll and colour checks).
 - **README** updated in every slice where setup changes.
 - **No new dependencies** beyond SPEC §2 without asking first.
