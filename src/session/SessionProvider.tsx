@@ -4,14 +4,18 @@ import { friendlyError } from '../lib/errors.ts'
 import { clearLastSession, setLastSession } from '../lib/storage.ts'
 import { ensureAnonymousUser, supabase } from '../lib/supabase.ts'
 import { Button, FullScreenSpinner, Notice } from '../ui/primitives.tsx'
+import { CHARACTER_COLUMNS, type CharacterRow } from '../sheet/types.ts'
 import type { Member, SessionRow } from './types.ts'
 
 type SessionContextValue = {
   uid: string
   session: SessionRow
   members: Member[]
+  /** PCs, plus NPCs the caller may see (RLS), ordered by position */
+  characters: CharacterRow[]
   me: Member
   isGm: boolean
+  memberName: (userId: string | null) => string | null
   refresh: () => Promise<void>
   updateMe: (patch: Partial<Pick<Member, 'display_name' | 'color'>>) => Promise<void>
   leave: () => Promise<void>
@@ -28,7 +32,7 @@ export function useSession(): SessionContextValue {
 type State =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; uid: string; session: SessionRow; members: Member[] }
+  | { kind: 'ready'; uid: string; session: SessionRow; members: Member[]; characters: CharacterRow[] }
 
 /**
  * Loads one session for the current anonymous user. If the user isn't (or is no
@@ -41,13 +45,16 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
   const load = useCallback(async () => {
     try {
       const uid = await ensureAnonymousUser()
-      const [s, m] = await Promise.all([
+      const [s, m, c] = await Promise.all([
         supabase.from('sessions').select('id,name,invite_code,gm_fate_points,gm_roll_mode,active_scene_id,spotlight,version')
           .eq('id', sessionId).maybeSingle<SessionRow>(),
         supabase.from('session_members').select('*').eq('session_id', sessionId).order('joined_at').returns<Member[]>(),
+        supabase.from('characters').select(CHARACTER_COLUMNS).eq('session_id', sessionId)
+          .order('position').order('id').returns<CharacterRow[]>(),
       ])
       if (s.error) throw s.error
       if (m.error) throw m.error
+      if (c.error) throw c.error
       const me = m.data?.find((x) => x.user_id === uid)
       if (!s.data || !me) {
         // RLS hides sessions you're not in, so "missing" and "not a member" look the same.
@@ -62,7 +69,7 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
         role: me.role,
         displayName: me.display_name,
       })
-      setState({ kind: 'ready', uid, session: s.data, members: m.data ?? [] })
+      setState({ kind: 'ready', uid, session: s.data, members: m.data ?? [], characters: c.data ?? [] })
     } catch (e) {
       setState({ kind: 'error', message: friendlyError(e) })
     }
@@ -79,8 +86,10 @@ export function SessionProvider({ sessionId, children }: { sessionId: string; ch
       uid: state.uid,
       session: state.session,
       members: state.members,
+      characters: state.characters,
       me,
       isGm: me.role === 'gm',
+      memberName: (userId) => state.members.find((x) => x.user_id === userId)?.display_name ?? null,
       refresh: load,
       async updateMe(patch) {
         const { error } = await supabase.from('session_members').update(patch)

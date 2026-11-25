@@ -31,3 +31,11 @@ export function errorCode(err: unknown): string | null {
   const message = typeof err === 'object' && err !== null && 'message' in err ? String(err.message) : ''
   return message in MESSAGES ? message : null
 }
+
+/** True when the request never reached the server (offline, DNS, CORS, timeout). */
+export function isNetworkError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const e = err as { message?: string; code?: string; status?: number }
+  if (e.code && /^[0-9A-Z]{5}$|^PGRST/.test(e.code)) return false // a real database/API error
+  return /failed to fetch|networkerror|load failed|network request failed|timeout|fetch failed/i.test(e.message ?? '')
+}
