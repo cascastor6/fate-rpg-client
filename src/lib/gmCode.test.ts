@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { GM_CODE_BLOCKLIST, gmCodeProblem, normalizeGmCode } from './gmCode.ts'
+import { GM_CODE_BLOCKLIST, gmCodeProblem, normalizeGmCode, suggestGmCode } from './gmCode.ts'
+import { WORDS } from './wordlist.ts'
 
 describe('normalizeGmCode', () => {
   it('ignores case, spacing and separators', () => {
@@ -38,5 +39,28 @@ describe('parity with the SQL migration', () => {
   it('uses the same minimum length and separator rule', () => {
     expect(sql).toContain('char_length(p_normalized) >= 10')
     expect(sql).toContain(`'[\\s._-]+'`)
+  })
+})
+
+describe('suggestGmCode', () => {
+  it('gives four distinct words from the list that pass the strength rule', () => {
+    for (let i = 0; i < 200; i++) {
+      const code = suggestGmCode()
+      const words = code.split('-')
+      expect(words).toHaveLength(4)
+      expect(new Set(words).size).toBe(4)
+      for (const w of words) expect(WORDS).toContain(w)
+      expect(gmCodeProblem(code)).toBeNull()
+    }
+  })
+  it('uses the injected random source', () => {
+    let n = 0
+    const code = suggestGmCode((buf) => { buf[0] = n++ })
+    expect(code).toBe(WORDS.slice(0, 4).join('-'))
+  })
+  it('has 512 unique lowercase words', () => {
+    expect(WORDS).toHaveLength(512)
+    expect(new Set(WORDS).size).toBe(512)
+    for (const w of WORDS) expect(w).toMatch(/^[a-z]{3,8}$/)
   })
 })

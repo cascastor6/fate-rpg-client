@@ -40,7 +40,7 @@ VITE_SUPABASE_ANON_KEY=<your anon or publishable key>
 npm install
 ```
 
-The schema, RLS policies and RPCs live in `supabase/migrations/` (`0001_schema.sql` … `0004_realtime.sql`). Apply them with the Supabase CLI, which is installed as a dev dependency:
+The schema, RLS policies and RPCs live in `supabase/migrations/` (`0001_schema.sql`, `0002_rls.sql`, …). Apply them with the Supabase CLI, which is installed as a dev dependency:
 
 ```bash
 npx supabase login
@@ -50,13 +50,15 @@ npx supabase login
 npx supabase link --project-ref abcd1234
 ```
 
+`link` asks for the database password you set when creating the project. If you've lost it, reset it under Project Settings → Database.
+
 ```bash
 npm run db:push
 ```
 
-`db:push` runs `supabase db push`, which applies any migrations the project doesn't have yet. Run it again whenever a new migration is added.
+`db:push` runs `supabase db push --remote`, which applies to your linked project any migrations it doesn't have yet. Run it again whenever a slice adds a migration. (Without `--remote`, CLI v3 targets a local Docker database and fails with `connect ECONNREFUSED 127.0.0.1:54322`.)
 
-**Without the CLI:** open **SQL Editor** in the dashboard and run the four files in order, pasting each one and clicking Run. Only do this on a fresh project, and don't mix the two methods.
+**Without the CLI:** open **SQL Editor** in the dashboard and run the files in order, pasting each one and clicking Run. Only do this on a fresh project, and don't mix the two methods.
 
 The migrations also:
 - add the tables to the `supabase_realtime` publication, so live updates work;

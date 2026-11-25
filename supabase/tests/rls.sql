@@ -54,6 +54,9 @@ reset role;
 -- A1, A2 join A (invite code is case/space-insensitive)
 select set_config('request.jwt.claims', :A1, false); set role authenticated;
 select t_err($$select public.join_session('ZZZZZZ', 'Al')$$, 'invalid_invite', 'unknown invite rejected');
+select t_ok((public.session_preview(:'inv_a')) ->> 'name' = 'Session A', 'session_preview shows the name before joining');
+select t_ok((public.session_preview(:'inv_a')) -> 'taken_colors' = '["red"]', 'session_preview lists taken colours');
+select t_err($$select public.session_preview('ZZZZZZ')$$, 'invalid_invite', 'session_preview rejects unknown invite');
 select t_ok(public.join_session(lower(:'inv_a'), 'Al') = :'sa', 'A1 joins with lower-case invite');
 select t_ok((select color from session_members where user_id = auth.uid()) <> 'red', 'A1 got an unused colour');
 select public.create_character(:'sa', '{"kind":"pc","name":"Aldric","template":"core",

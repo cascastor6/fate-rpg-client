@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:rls": "node --env-file-if-exists=.env.local scripts/rls-test.mjs",
     "test:rls:local": "bash scripts/rls-test-local.sh",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push --remote"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

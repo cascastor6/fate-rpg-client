@@ -97,6 +97,10 @@ try {
   expectError(await anon.from('sessions').select('*'), 'signed-out client cannot read sessions')
 
   section('Joining and sheets')
+  const pv = await a1.rpc('session_preview', { p_invite_code: invA })
+  check(pv.data?.name === 'RLS test A' && JSON.stringify(pv.data?.taken_colors) === '["red"]',
+    'session_preview shows name and taken colours before joining', pv.error?.message)
+  expectError(await a1.rpc('session_preview', { p_invite_code: 'ZZZZZZ' }), 'session_preview rejects unknown invite', /invalid_invite/)
   expectError(await a1.rpc('join_session', { p_invite_code: 'ZZZZZZ', p_display_name: 'Al' }), 'unknown invite rejected', /invalid_invite/)
   const ja1 = await a1.rpc('join_session', { p_invite_code: invA.toLowerCase(), p_display_name: 'Al' })
   check(ja1.data === sa, 'A1 joined A (invite is case-insensitive)', ja1.error?.message)
