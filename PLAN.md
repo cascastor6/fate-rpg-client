@@ -25,19 +25,19 @@ Section references (§) point to SPEC.md.
 
 **Test**: `npm run dev` → the home page shows a uid. `npm run test:rls` → all PASS.
 
-**You do in Supabase**: create the project, enable anonymous sign-ins, run the 4 migrations, and copy the URL and anon key into `.env.local`.
+**You do in Supabase**: create the project, enable anonymous sign-ins, run the 4 migrations, and copy the URL and anon key into `.env.local`. The migration creates the GM-code pepper in Supabase Vault itself, so there's nothing to configure; if Vault turns out to be disabled on your project, I'll tell you how to enable it.
 
 ---
 
 ## Slice 2: Create session / join by invite / GM reclaim
 **Build**
-- Home screen with: resume card, New session, Join with code, I'm the GM.
-- Create flow → "Save your GM code" screen (copy and share, an "I've saved it" confirm) → `/s/:id/gm` (a placeholder GM screen listing members).
+- Home screen with: resume card, Join with code, and a **GM code textbox** (with a "Suggest one" button and a strength hint).
+- GM code flow (SPEC §3.3): `claim_gm` → a match goes to `/s/:id/gm` (a placeholder GM screen listing members). No match → "Create a session with this code?" (name, display name, colour) → `create_session` → invite link screen → GM screen.
 - `/join/:code` → display name + colour swatches (SPEC §7.8) → `/s/:id` (a placeholder player screen). Create session also has a colour picker. Colour change in the menu.
-- GM reclaim with the GM code. `fate.last` resume logic, and "Leave session".
-- `SessionProvider` (initial fetch only; no realtime yet). Error mapping for `invalid_invite` and `invalid_gm_code`.
+- `fate.last` resume logic, and "Leave session".
+- `SessionProvider` (initial fetch only; no realtime yet). Error mapping for `invalid_invite`, `weak_gm_code`, `gm_code_taken` and `rate_limited`.
 
-**Test (two browsers)**: A creates a session and notes the codes → B opens the invite link, joins as "Bea", accepts the pre-selected unused colour (different from A's) → A reloads and sees Bea in the member list with her colour. B reloads and goes straight back in. C (a third private window) enters the GM code and lands on the GM screen. A wrong GM code shows a friendly error. A wrong invite shows "No session with that code".
+**Test (two browsers)**: A types the GM code `ember lantern otter quarry`, confirms "create", and names the session → B opens the invite link, joins as "Bea", accepts the pre-selected unused colour (different from A's) → A reloads and sees Bea in the member list with her colour. B reloads and goes straight back in. C (a third private window) types `Ember  Lantern Otter Quarry` (different case and spacing) and lands straight on the GM screen, with no create prompt. A typo'd code shows "No session uses this code yet. Create one?", and cancelling creates nothing. `short` is rejected as too weak. 11 wrong codes in a row show "Too many attempts, try again in a few minutes". A wrong invite shows "No session with that code".
 
 **You do**: nothing new.
 

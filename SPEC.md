@@ -47,16 +47,23 @@ No other runtime dependencies. Icons are inline SVG. Toasts, bottom sheets, the 
 
 ### 3.2 Codes
 - **Invite code**: 6 characters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no 0/O/1/I), e.g. `K7QPMX`. It is not secret; anyone with it can join as a player. Invite URL: `https://<host>/join/K7QPMX`.
-- **GM code**: `<invite code>-<secret>`, where the secret is 12 characters from the same alphabet, grouped for readability: `K7QPMX-H4TR-9WZC-B2NE` (60 bits of entropy).
-  - The prefix lets the server find the session without scanning every hash.
-  - Only `crypt(secret, gen_salt('bf'))` (pgcrypto bcrypt) is stored, in `session_secrets`, which no client role can read.
-  - The full GM code is shown once, right after creation, with copy and share buttons and a warning to save it. The app does not store it.
-- Code checks run server-side in `SECURITY DEFINER` RPCs. Input is normalised first (upper-case, dashes and spaces removed).
+- **GM code**: chosen by the GM, typed into a textbox. **Entering a code that no session uses yet is how a session is created**; entering it again later, on any device, makes you that session's GM.
+  - **Normalisation** (client and server): trim, collapse inner whitespace to one space, lower-case. `Silver Order Falls` and `silver  order falls` are the same code.
+  - **Strength rule** (checked in the client and again in the RPC): at least 10 characters after normalisation, not just one repeated character, and not on a short built-in blocklist (`password…`, `fatecore…`, `1234567890`, and so on). A **"Suggest one"** button fills in 4 random words from a word list bundled in the app, e.g. `ember-lantern-otter-quarry`, which gives about 41 bits of entropy.
+  - **Uniqueness**: a code belongs to exactly one session (unique index on its hash).
+  - **Storage**: only `hmac(normalised_code, pepper, 'sha256')` is stored, in `session_secrets`, which no client role can read. The pepper is a random 32-byte secret that the migration creates in Supabase Vault (`gm_code_pepper`); it is never in a table. A deterministic keyed hash, rather than bcrypt, is needed so the server can find the session from the code alone. The pepper means a leaked table can't be brute-forced without the Vault secret too.
+  - **Guessing protection**: failed `claim_gm` attempts are recorded per user. More than 10 failures in 10 minutes gives `rate_limited`. Supabase's own limit on anonymous sign-ins per IP caps how many fresh users one attacker can make.
+  - The app never stores the GM code. After creation it reminds the GM to remember or write it down.
+- Code checks run server-side in `SECURITY DEFINER` RPCs.
 
 ### 3.3 Flows
-1. **Create session** (`/` → "New session"): enter a session name and your display name → `create_session()` → the screen shows the GM code and invite link → continue to the GM screen.
+1. **GM: enter a GM code** (`/` → the "GM code" textbox → Continue). The app calls `claim_gm(code)`:
+   - **The code matches a session**: you become its GM and go to the GM screen (this is reclaim; see 3).
+   - **No session uses it**: the same card expands to "No session uses this code yet. Create one?" with fields for session name, your display name and your colour (§7.8) → `create_session(code, …)` → a screen showing the invite link (copy and share), with a reminder that the GM code is what gets you back in → GM screen.
+   - **Code too weak**: an inline message with the rule, plus the "Suggest one" button.
+   Because a new code never silently creates a session (there's a confirm step), a typo while reclaiming can't spin up an unwanted session.
 2. **Join** (`/join/:code`, or type the code on `/`): enter a display name and pick a player colour (§7.8) → `join_session()` → the player picks a template and names their character on first entry → player sheet.
-3. **GM reclaim** (`/` → "I'm the GM"): enter the GM code → `claim_gm()` → GM screen. This works on any device. If that device's user was already a player in the session, they are promoted to GM. Several devices can be GM at once; reclaiming does not revoke the others.
+3. **GM reclaim**: the same textbox as step 1. A matching code → GM screen. This works on any device. If that device's user was already a player in the session, they are promoted to GM. Several devices can be GM at once; reclaiming does not revoke the others.
 4. **Resume**: localStorage key `fate.last` = `{ sessionId, inviteCode, role, displayName }`. On launch, if it exists and the user is still a member (checked with a select on `session_members`), the app goes straight in. If not, the key is cleared and the home screen is shown.
 
 ### 3.4 Lost identity
@@ -66,7 +73,7 @@ If a player clears site data, they get a new anonymous user and lose ownership o
 
 ## 4. Database schema
 
-All tables live in `public`. Extensions: `pgcrypto`. Every table has RLS enabled. `updated_at` is maintained by a shared trigger.
+All tables live in `public`. Extensions: `pgcrypto`, Supabase Vault (`supabase_vault`, enabled by default on hosted projects). Every table has RLS enabled. `updated_at` is maintained by a shared trigger.
 
 ### 4.1 Tables
 
@@ -86,8 +93,15 @@ create table sessions (
 -- session_secrets: one row per session; NO policies -> unreadable by clients.
 create table session_secrets (
   session_id   uuid primary key references sessions(id) on delete cascade,
-  gm_code_hash text not null            -- crypt(secret, gen_salt('bf', 10))
+  gm_code_hash text not null unique     -- hex(hmac(normalised code, vault pepper, 'sha256'))
 );
+
+-- gm_code_attempts: failed claim_gm calls, for rate limiting. NO policies.
+create table gm_code_attempts (
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  attempted_at timestamptz not null default now()
+);
+create index on gm_code_attempts (user_id, attempted_at desc);
 
 -- session_members ----------------------------------------------------------
 create table session_members (
@@ -186,7 +200,7 @@ is_session_gm(p_session_id uuid)     returns boolean  -- auth.uid() has role 'gm
 | Table | SELECT | INSERT | UPDATE | DELETE |
 |---|---|---|---|---|
 | `sessions` | `is_session_member(id)` | — (RPC only) | `is_session_gm(id)`; column grant limited to `name`, `gm_fate_points`, `gm_roll_mode` | `is_session_gm(id)` |
-| `session_secrets` | — | — | — | — (no policies; all privileges revoked from `anon` and `authenticated`) |
+| `session_secrets`, `gm_code_attempts` | — | — | — | — (no policies; all privileges revoked from `anon` and `authenticated`) |
 | `session_members` | `is_session_member(session_id)` | — (RPC only) | own row (`user_id = auth.uid()`); column grant limited to `display_name`, `color` | own row (leave) or `is_session_gm(session_id)` (kick) |
 | `characters` | `is_session_member(session_id)` | member, and `owner_id = auth.uid()` or `is_session_gm(session_id)` | `owner_id = auth.uid()` or `is_session_gm(session_id)`; `WITH CHECK` same, plus the trigger guards `session_id`/`owner_id` | same as UPDATE |
 | `rolls` | `is_session_member(session_id) and (not is_hidden or is_session_gm(session_id))`, so players never receive closed GM rolls, not even over realtime | — (RPC only, so results can't be forged) | — (reveal goes through `reveal_roll`) | — |
@@ -205,9 +219,10 @@ So:
 
 | Function | Mode | Behaviour |
 |---|---|---|
-| `create_session(p_name text, p_display_name text, p_color text default null) returns table(session_id uuid, invite_code text, gm_code text)` | definer | Requires `auth.uid()`. Generates a unique invite code (retries on collision) and a 12-character secret. Inserts the `sessions` row, the `session_secrets` row (bcrypt hash of the secret) and a `session_members` row with role `gm` (with `p_color`, default `slate`). Returns the plaintext GM code; this is the only time it ever exists. |
+| `create_session(p_gm_code text, p_name text, p_display_name text, p_color text default null) returns table(session_id uuid, invite_code text)` | definer | Requires `auth.uid()`. Normalises the code and enforces the strength rule (`weak_gm_code`). Generates a unique invite code, retrying on collision. Inserts the `sessions` row, the `session_secrets` row (peppered HMAC of the code) and a `session_members` row with role `gm` (with `p_color`, default `slate`). If the code's hash already exists (two people raced for the same new code) it raises `gm_code_taken`, and the client retries `claim_gm`. |
 | `join_session(p_invite_code text, p_display_name text, p_color text default null) returns uuid` | definer | Looks up the session by normalised code and raises `invalid_invite` if none. Inserts the member as `player`. If `p_color` is null it assigns the first palette colour nobody in the session uses yet. If already a member, updates `display_name` (and `color` if given) and keeps the role. Returns `session_id`. |
-| `claim_gm(p_gm_code text) returns uuid` | definer | Splits the code into its invite prefix and secret, finds the session, and compares `crypt(secret, hash) = hash`. On failure it raises `invalid_gm_code` (a generic error that doesn't reveal whether the prefix existed). On success it upserts the member with role `gm`; `display_name` defaults to 'GM' if new. Returns `session_id`. |
+| `claim_gm(p_gm_code text) returns uuid` | definer | First checks the rate limit (`rate_limited`). Then normalises the code, computes the HMAC and looks it up. **No match**: records an attempt and returns `null`; the client then offers to create a session. **Match**: upserts the member with role `gm` (`display_name` defaults to 'GM' if new) and returns `session_id`. |
+| `change_gm_code(p_session_id uuid, p_new_code text) returns void` | definer | GM only. Applies the strength rule and uniqueness (`weak_gm_code`, `gm_code_taken`), then replaces the hash. Existing GM devices keep their access. |
 | `roll_dice(p_session_id uuid, p_character_id uuid default null, p_block_id text default null, p_bonus int default 0, p_label text default null, p_hidden boolean default null) returns rolls` | definer | Requires membership. Snapshots the caller's `display_name` and `color`. **Hidden:** a non-GM passing `p_hidden = true` gets `not_gm`. For a GM, `null` means use `sessions.gm_roll_mode`. A hidden roll also inserts a `hidden_roll` session event with `payload: { roll_id, roller_name, roller_color }` and no result, so players know a roll happened. If `p_block_id` is given, the character must be in the session and either owned by the caller or the caller is GM; `skill_value` is read from that skill block and `label` defaults to its label. `p_bonus` is clamped to -20..20. Each face is `floor(random()*3)::int - 1`. Inserts the row and returns it. |
 | `adjust_fate_points(p_character_id uuid, p_delta int) returns int` | invoker | Atomic `fate_points = greatest(0, fate_points + p_delta)`, under RLS (owner or GM). Returns the new value. If the caller is a GM and not the owner, it also inserts a `session_events` row (`fate_point_awarded` / `fate_point_taken`, `payload: { delta }`). Creating the event needs definer rights, so the event insert lives in a small internal definer helper. |
 | `adjust_gm_pool(p_session_id uuid, p_delta int) returns int` | invoker | Atomic `gm_fate_points = greatest(0, gm_fate_points + p_delta)`, GM only through RLS. |
@@ -224,7 +239,7 @@ So:
 
 All block RPCs lock the character row (`update ... where id = $1`), so concurrent operations on one sheet are serialised. Each rebuilds the array with `jsonb_array_elements ... with ordinality` / `jsonb_agg ... order by`.
 
-Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `invalid_invite`, `invalid_gm_code`, `block_not_found` or `invalid_block`. The client maps them to friendly messages.
+Errors are raised with `raise exception using errcode = 'P0001', message = '<code>'`, where `<code>` is one of `not_authenticated`, `not_member`, `not_gm`, `invalid_invite`, `weak_gm_code`, `gm_code_taken`, `rate_limited`, `block_not_found` or `invalid_block`. The client maps them to friendly messages.
 
 ---
 
@@ -430,6 +445,7 @@ On phones, after any roll lands, a full-screen overlay tinted with the roller's 
 - **Phone**: a horizontal scroll-snap pager with one card per character, swipeable, with dots and name chips to jump between them. No library.
 - **Scene aspects panel**: a list of scene/situation aspects, each with a free-invoke counter (−/+). The GM can add, edit, delete and drag to reorder. Players see the same panel read-only, collapsible above their sheet.
 - **Floating 4dF button** (§7.5) for quick GM rolls, which follow the open/closed setting (§7.9).
+- **Change GM code**: in the members panel, enter a new code twice → `change_gm_code`.
 - **GM roll mode toggle**: Open / Closed in the toolbar (§7.9).
 - Character cards have a border in the owning player's colour (§7.8).
 - **GM fate point pool**: a big counter in the GM toolbar with −/+ and a "Reset to N" helper (N = number of PCs, the usual scene start).
@@ -479,7 +495,7 @@ On phones, after any roll lands, a full-screen overlay tinted with the roller's 
 
 | Route | Screen |
 |---|---|
-| `/` | Home: resume last session, New session, Join with code, I'm the GM |
+| `/` | Home: resume last session, Join with code, GM code textbox (reclaim or create) |
 | `/join/:code` | Join form (display name) |
 | `/s/:sessionId` | Redirects by role: GM → `/s/:id/gm`, player → their character, or to character creation |
 | `/s/:sessionId/new-character` | Template picker + name |
@@ -522,7 +538,8 @@ scripts/rls-test.mjs
   - A player cannot insert into `rolls` directly, cannot read `session_secrets`, and cannot update `sessions`.
   - A player cannot create or edit scene aspects.
   - The GM of A can update A1's character and adjust its fate points, and cannot read session B.
-  - `claim_gm` rejects a wrong secret.
+  - `claim_gm` returns `null` for an unknown code and grants nothing; the 11th failure within 10 minutes raises `rate_limited`.
+  - `create_session` with a code another session already uses raises `gm_code_taken`, and with `short` it raises `weak_gm_code`.
   - A closed GM roll in session A is invisible to player A1 (0 rows); A1 does see the `hidden_roll` event. After `reveal_roll`, A1 can select it.
   - A player calling `roll_dice(..., p_hidden => true)` gets `not_gm`; a player can't call `reveal_roll` or change `gm_roll_mode`.
   - A player can change their own `color` but not another member's.
