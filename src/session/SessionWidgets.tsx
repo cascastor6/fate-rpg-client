@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { friendlyError } from '../lib/errors.ts'
 import { inviteUrl } from '../lib/invite.ts'
 import { ColorPicker } from '../ui/ColorPicker.tsx'
+import { ThemeSwitch } from '../ui/ThemeSwitch.tsx'
 import { colorOf, type PlayerColor } from '../ui/colors.ts'
 import { Button, Card, Notice, TextField } from '../ui/primitives.tsx'
 import { useSession } from './SessionProvider.tsx'
@@ -145,6 +146,7 @@ export function YouPanel() {
       <div className="mt-4">
         <ColorPicker value={me.color} takenBy={takenBy} onChange={(color) => void run(() => updateMe({ color }))} />
       </div>
+      <div className="mt-4"><ThemeSwitch /></div>
       {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
       <div className="mt-5 border-t border-[color:var(--border)] pt-4">
         {!confirmLeave ? (

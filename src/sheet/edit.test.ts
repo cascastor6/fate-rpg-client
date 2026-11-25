@@ -144,3 +144,29 @@ describe('mergeSheet / withFreshIds', () => {
     expect(f.blocks.filter((b) => b.section === skills)).toHaveLength(18)
   })
 })
+
+describe('template bundles', () => {
+  it('round-trips a bundle and keeps the offered flag', async () => {
+    const { templateBundle, parseTemplatesFile } = await import('./io.ts')
+    const a = { ...buildTemplate('core', 'Knight'), kind: 'template' as const }
+    const b = { ...buildTemplate('accelerated', 'Rogue'), kind: 'template' as const }
+    const bundle = templateBundle('Silver Order', [{ sheet: a, offered: true }, { sheet: b, offered: false }], new Date('2026-11-25T12:00:00Z'))
+    expect(bundle.format).toBe('fate-table-templates')
+    const res = parseTemplatesFile(JSON.stringify(bundle))
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.templates.map((t) => [t.sheet.name, t.sheet.kind, t.offered])).toEqual([['Knight', 'template', true], ['Rogue', 'template', false]])
+    expect(res.templates[0].sheet.blocks).toEqual(a.blocks)
+  })
+  it('accepts a single exported sheet as one template', async () => {
+    const { parseTemplatesFile } = await import('./io.ts')
+    const res = parseTemplatesFile(JSON.stringify(buildTemplate('condensed', 'Solo')))
+    expect(res.ok && res.templates.map((t) => [t.sheet.name, t.sheet.kind, t.offered])).toEqual([['Solo', 'template', false]])
+  })
+  it('names the bad template in a bundle', async () => {
+    const { parseTemplatesFile } = await import('./io.ts')
+    const bad = { format: 'fate-table-templates', templates: [buildTemplate('blank', 'Fine'), { format: 'fate-table-sheet', sections: 'x', blocks: [] }] }
+    expect(parseTemplatesFile(JSON.stringify(bad))).toMatchObject({ ok: false, error: expect.stringMatching(/^Template 2:/) })
+    expect(parseTemplatesFile('{"format":"fate-table-templates","templates":[]}')).toMatchObject({ ok: false })
+  })
+})

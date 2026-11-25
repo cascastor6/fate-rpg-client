@@ -85,7 +85,7 @@ function NpcCard({ npc, boardScene }: { npc: CharacterRow; boardScene: SceneRow 
   const [renaming, setRenaming] = useState(false)
 
   if (snapshot.status !== 'ready') {
-    return <li className="flex min-h-24 items-center justify-center rounded-2xl border border-[color:var(--border)]"><Spinner className="size-5" /></li>
+    return <li aria-label={`NPC ${npc.name}`} aria-busy="true" className="flex min-h-24 items-center justify-center rounded-2xl border border-[color:var(--border)]"><Spinner className="size-5" /></li>
   }
   const { data } = snapshot
   const aspects = data.blocks.filter((b) => b.type === 'aspect')

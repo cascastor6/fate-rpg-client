@@ -52,7 +52,8 @@ export function DiceTray() {
         style={{ borderColor: c.fill }}
         aria-label="Dismiss roll"
       >
-        <span className="text-sm font-semibold" style={{ color: c.fill }}>
+        <span className="text-sm font-semibold">
+          <span className="mr-1.5 inline-block size-2.5 rounded-full align-middle" style={{ background: c.fill }} aria-hidden="true" />
           {name}
           {current.kind === 'roll' && current.revealed && ' · revealed'}
           {current.kind === 'roll' && current.roll.is_hidden && ' · hidden'}

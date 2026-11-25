@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { Navigate, Outlet, useParams } from 'react-router-dom'
 import { DiceLayer } from '../dice/DiceLayer.tsx'
 import { SpotlightPopup } from '../gm/SpotlightPopup.tsx'
 import { SessionProvider, useSession } from '../session/SessionProvider.tsx'
+import { FullScreenSpinner } from '../ui/primitives.tsx'
 
 /** /s/:sessionId — loads the session (or bounces home) for everything below it. */
 export default function SessionLayout() {
@@ -10,7 +11,9 @@ export default function SessionLayout() {
   if (!sessionId) return <Navigate to="/" replace />
   return (
     <SessionProvider key={sessionId} sessionId={sessionId}>
-      <Outlet />
+      <Suspense fallback={<FullScreenSpinner />}>
+        <Outlet />
+      </Suspense>
       <DiceLayer />
       <SpotlightPopup />
     </SessionProvider>

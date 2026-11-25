@@ -122,6 +122,9 @@ PGHOST=localhost PGUSER=postgres npm run test:rls:local
 
 ## Troubleshooting
 
+- **"The database is out of date for this version of the app"**: a new migration hasn't been applied. Run `npm run db:push`, then reload.
+- **Deleting users under Authentication → Users**: safe. A browser whose anonymous user was deleted gets a fresh sign-in automatically on its next load or action. It loses its old memberships (players rejoin with the invite link, GMs re-enter the GM code). Old builds showed a raw `…_user_id_fkey` error here.
+- **Light / dark mode**: follows your device by default. Change it on the home page or in ☰ Menu → You.
 - **Changes don't show up live in the other window.** Migration `0004_realtime.sql` adds the tables to the `supabase_realtime` publication. Check **Database → Publications → supabase_realtime** lists `sessions`, `session_members`, `characters`, `sheet_sections`, `sheet_blocks` (and the rest). Reloading always shows the latest data.
 - **"Could not find the function … in the schema cache"** or **"Something in that form isn't valid"** right after pulling: a new migration hasn't been applied. Run `npm run db:push`.
 

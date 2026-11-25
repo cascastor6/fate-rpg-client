@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { friendlyError } from '../lib/errors.ts'
 import { supabase } from '../lib/supabase.ts'
 import { useSession } from '../session/SessionProvider.tsx'
 import { TemplatePicker } from '../sheet/components/TemplatePicker.tsx'
+import { parseTemplatesFile, withFreshIds } from '../sheet/io.ts'
 import { sheetFromChoice, templateChoices } from '../sheet/templateSources.ts'
+import type { SheetJson } from '../sheet/types.ts'
+import { toast } from '../ui/toast.tsx'
 import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { Button, Card, Notice, TextField } from '../ui/primitives.tsx'
 
@@ -37,7 +40,10 @@ export function TemplatesCard() {
           ))}
         </ul>
       )}
-      <Button variant="secondary" className="mt-3" onClick={() => setCreating(true)}>New template</Button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => setCreating(true)}>New template</Button>
+        <ImportTemplates />
+      </div>
       {creating && <NewTemplateSheet onClose={() => setCreating(false)} />}
     </Card>
   )
@@ -84,5 +90,75 @@ function NewTemplateSheet({ onClose }: { onClose: () => void }) {
         </div>
       </form>
     </BottomSheet>
+  )
+}
+
+/** Import a template bundle (from "Delete session") or a single sheet as template(s). */
+function ImportTemplates() {
+  const { session, refresh } = useSession()
+  const file = useRef<HTMLInputElement>(null)
+  const [pending, setPending] = useState<{ templates: { sheet: SheetJson; offered: boolean }[]; notes: string[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const onFile = async (f: File | undefined) => {
+    setError(null)
+    if (!f) return
+    if (f.size > 5_000_000) return setError('That file is too big.')
+    const res = parseTemplatesFile(await f.text())
+    if (!res.ok) return setError(res.error)
+    setPending({ templates: res.templates, notes: res.notes })
+  }
+
+  const run = async () => {
+    if (!pending) return
+    setBusy(true)
+    let done = 0
+    try {
+      for (const t of pending.templates) {
+        const { data: id, error: err } = await supabase.rpc('create_character', {
+          p_session_id: session.id, p_sheet: withFreshIds({ ...t.sheet, kind: 'template' }),
+        })
+        if (err) throw err
+        if (t.offered) {
+          const { error: e2 } = await supabase.from('characters').update({ visible_to_players: true }).eq('id', id as string)
+          if (e2) throw e2
+        }
+        done++
+      }
+      toast(`Imported ${done} template${done === 1 ? '' : 's'}.`)
+      setPending(null)
+    } catch (e) {
+      toast(`${friendlyError(e)} (${done} of ${pending.templates.length} imported)`, 'error')
+    } finally {
+      await refresh()
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <Button variant="secondary" onClick={() => file.current?.click()}>Import templates…</Button>
+      <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Templates file"
+        onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = '' }} />
+      {error && <div className="w-full"><Notice tone="error">{error}</Notice></div>}
+      {pending && (
+        <BottomSheet open title="Import templates" onDismiss={() => setPending(null)}>
+          <div className="flex flex-col gap-3">
+            <p>Add {pending.templates.length} template{pending.templates.length === 1 ? '' : 's'} to this session:</p>
+            <ul className="list-disc pl-5">
+              {pending.templates.map((t, i) => (
+                <li key={i}>{t.sheet.name} <span className="text-sm text-[color:var(--muted)]">({t.sheet.blocks.length} blocks{t.offered ? ', offered to players' : ', draft'})</span></li>
+              ))}
+            </ul>
+            {pending.notes.length > 0 && <Notice><ul className="list-disc pl-4">{pending.notes.map((n, i) => <li key={i}>{n}</li>)}</ul></Notice>}
+            <div className="flex gap-2">
+              <Button className="flex-1" busy={busy} onClick={() => void run()}>Import</Button>
+              <Button variant="secondary" onClick={() => setPending(null)}>Cancel</Button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+    </>
   )
 }

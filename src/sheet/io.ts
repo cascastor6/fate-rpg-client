@@ -51,6 +51,11 @@ export function parseImport(text: string): ImportResult {
   } catch {
     return { ok: false, error: 'That file isn’t valid JSON.' }
   }
+  return parseSheetObject(raw)
+}
+
+/** Validate one already-parsed sheet object (see parseImport). */
+export function parseSheetObject(raw: unknown): ImportResult {
   if (typeof raw !== 'object' || raw === null) return { ok: false, error: 'That file isn’t a character sheet.' }
   const r = raw as Record<string, unknown>
   if (r.format !== 'fate-table-sheet') return { ok: false, error: 'That file isn’t a Fate Table sheet (missing "format").' }
@@ -178,4 +183,52 @@ export function mergeSheet(base: SheetJson, add: SheetJson): MergeResult {
     ...added.filter((b) => b.section === s.id),
   ])
   return { ok: true, sheet: { ...base, sections, blocks }, added: added.length }
+}
+
+// ---- template bundles (SPEC §5.7): what "Delete session" downloads ----------------------
+
+export const TEMPLATE_BUNDLE_FORMAT = 'fate-table-templates'
+export type TemplateBundle = {
+  format: typeof TEMPLATE_BUNDLE_FORMAT
+  version: 1
+  session_name: string
+  exported_at: string
+  templates: (SheetJson & { offered: boolean })[]
+}
+
+export function templateBundle(sessionName: string, templates: { sheet: SheetJson; offered: boolean }[], now = new Date()): TemplateBundle {
+  return {
+    format: TEMPLATE_BUNDLE_FORMAT,
+    version: 1,
+    session_name: sessionName,
+    exported_at: now.toISOString(),
+    templates: templates.map((t) => ({ ...t.sheet, kind: 'template' as const, offered: t.offered })),
+  }
+}
+
+export type TemplatesImport =
+  | { ok: true; templates: { sheet: SheetJson; offered: boolean }[]; notes: string[] }
+  | { ok: false; error: string }
+
+/** Accepts a template bundle, or a single .fate.json sheet (imported as one template). */
+export function parseTemplatesFile(text: string): TemplatesImport {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return { ok: false, error: 'That file isn’t valid JSON.' }
+  }
+  const r = raw as Record<string, unknown> | null
+  const items: unknown[] = r && r.format === TEMPLATE_BUNDLE_FORMAT && Array.isArray(r.templates) ? r.templates : [raw]
+  if (items.length === 0) return { ok: false, error: 'That file has no templates in it.' }
+  if (items.length > 50) return { ok: false, error: 'That file has more than 50 templates.' }
+  const out: { sheet: SheetJson; offered: boolean }[] = []
+  const notes: string[] = []
+  for (const [i, item] of items.entries()) {
+    const res = parseSheetObject(item)
+    if (!res.ok) return { ok: false, error: items.length > 1 ? `Template ${i + 1}: ${res.error}` : res.error }
+    out.push({ sheet: { ...res.sheet, kind: 'template' }, offered: (item as Record<string, unknown>).offered === true })
+    notes.push(...res.notes.map((n) => (items.length > 1 ? `${res.sheet.name}: ${n}` : n)))
+  }
+  return { ok: true, templates: out, notes }
 }

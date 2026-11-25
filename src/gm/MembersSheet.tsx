@@ -8,6 +8,7 @@ import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { colorOf } from '../ui/colors.ts'
 import { Button, Card, Notice, TextField } from '../ui/primitives.tsx'
 import { toast } from '../ui/toast.tsx'
+import { DeleteSession } from './DeleteSession.tsx'
 
 /** Members panel (SPEC §8.1): invite, members (kick), assign characters, change GM code. */
 export function MembersSheet({ onClose }: { onClose: () => void }) {
@@ -19,6 +20,7 @@ export function MembersSheet({ onClose }: { onClose: () => void }) {
         <AssignCharacters />
         <ChangeGmCode />
         <YouPanel />
+        <DeleteSession />
       </div>
     </BottomSheet>
   )

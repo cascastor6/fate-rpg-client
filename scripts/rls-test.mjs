@@ -211,9 +211,23 @@ try {
   expectRows(await a1.from('sheet_blocks').select('id').eq('character_id', tpl), 1, 'player can read an offered template')
   expectNoRows(await a1.from('sheet_blocks').update({ label: 'x' }).eq('character_id', tpl).select(), 'player cannot edit an offered template')
 
+  section('Deleting')
+  expectNoRows(await a2.from('characters').delete().eq('id', c1).select('id'), 'a player cannot delete another player\'s character')
+  expectNoRows(await a1.from('sessions').delete().eq('id', sa).select('id'), 'a player cannot delete the session')
+  expectRows(await gm.from('characters').delete().eq('id', npc).select('id'), 1, 'GM deletes an NPC')
+  expectNoRows(await gm.from('sheet_blocks').select('id').eq('character_id', npc), 'the NPC\'s sheet is gone')
+
   section('GM code rate limit')
   for (let i = 0; i < 9; i++) await a1.rpc('claim_gm', { p_gm_code: `wrong code number ${i}` })
   expectError(await a1.rpc('claim_gm', { p_gm_code: 'wrong code number 99' }), '11th failed claim in 10 minutes is rate limited', /rate_limited/)
+
+  section('Delete session')
+  const del = await gm.from('sessions').delete().eq('id', sa).select('id')
+  expectRows(del, 1, 'GM deletes session A (cascades to everything in it)')
+  expectNoRows(await a1.from('characters').select('id').eq('session_id', sa), 'its characters are gone')
+  const again = await gm.rpc('create_session', { p_gm_code: codeA, p_name: 'Again', p_display_name: 'Sam' })
+  check(!again.error, 'its GM code is free to start a new session', again.error?.message)
+  if (!again.error) sa = again.data.session_id
 } catch (e) {
   fail('test run aborted', e.message)
 } finally {

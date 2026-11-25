@@ -293,6 +293,43 @@ export function ImageBlock({ block, a }: { block: BlockRow; a: BlockActions }) {
   )
 }
 
+/** Gear (SPEC §5.2): name, optional effect, optional quantity with inline −/+. */
+export function GearBlock({ block, a }: { block: BlockRow; a: BlockActions }) {
+  const effect = str(block.value)
+  const qty = block.props.quantity
+  const name = block.label || 'Unnamed gear'
+  const setQty = (n: number) => a.send({ kind: 'patch', blockId: block.id, patch: { props: { quantity: Math.max(0, Math.min(999, n)) } } })
+  return (
+    <div className="flex items-stretch gap-1">
+      <EditArea a={a} block={block} className="min-w-0 flex-1">
+        <span className={`block font-semibold leading-snug ${block.label ? '' : 'italic text-[color:var(--muted)]'}`}>{name}</span>
+        {effect ? (
+          <span className="mt-0.5 block whitespace-pre-wrap break-words text-sm leading-snug text-[color:var(--muted)]">{effect}</span>
+        ) : a.canEdit && !block.label ? (
+          <span className="block text-sm"><Placeholder>Tap to name this item</Placeholder></span>
+        ) : null}
+      </EditArea>
+      {qty != null && (
+        <div className="flex shrink-0 items-center" role="group" aria-label={`${name} quantity`}>
+          {a.canEdit && (
+            <button type="button" onClick={() => setQty(qty - 1)} disabled={qty <= 0} aria-label={`One less ${name}`}
+              className="flex size-11 items-center justify-center rounded-full text-[color:var(--muted)] hover:bg-black/5 disabled:opacity-30 dark:hover:bg-white/10">
+              <IconMinus className="size-4" />
+            </button>
+          )}
+          <span className="min-w-9 text-center text-lg font-bold tabular-nums" title="Quantity">×{qty}</span>
+          {a.canEdit && (
+            <button type="button" onClick={() => setQty(qty + 1)} disabled={qty >= 999} aria-label={`One more ${name}`}
+              className="flex size-11 items-center justify-center rounded-full text-[color:var(--muted)] hover:bg-black/5 disabled:opacity-30 dark:hover:bg-white/10">
+              <IconPlus className="size-4" />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SeparatorBlock({ block }: { block: BlockRow }) {
   return (
     <div className="flex items-center gap-3 px-3 pt-3 pb-1" role="separator">
@@ -313,5 +350,6 @@ export function BlockView({ block, a, canRoll }: { block: BlockRow; a: BlockActi
     case 'number': return <NumberBlock block={block} a={a} />
     case 'image': return <ImageBlock block={block} a={a} />
     case 'separator': return <SeparatorBlock block={block} />
+    case 'gear': return <GearBlock block={block} a={a} />
   }
 }

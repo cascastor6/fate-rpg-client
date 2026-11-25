@@ -51,7 +51,7 @@ export function RollLog() {
               return (
                 <li key={e.hidden.id} className="flex flex-col gap-1 rounded-xl px-3 py-2">
                   <div className="flex items-baseline gap-2">
-                    <span className="font-semibold" style={{ color: c.fill }}>{e.hidden.roller_name}</span>
+                    <span className="font-semibold"><span className="mr-1.5 inline-block size-2.5 rounded-full align-middle" style={{ background: c.fill }} aria-hidden="true" />{e.hidden.roller_name}</span>
                     <span className="ml-auto text-xs text-[color:var(--muted)]">{relativeTime(e.hidden.created_at)}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export function RollLog() {
             return (
               <li key={r.id} className="flex flex-col gap-1 rounded-xl px-3 py-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-semibold" style={{ color: c.fill }}>{r.roller_name}</span>
+                  <span className="font-semibold"><span className="mr-1.5 inline-block size-2.5 rounded-full align-middle" style={{ background: c.fill }} aria-hidden="true" />{r.roller_name}</span>
                   {r.is_hidden && <span className="rounded-full bg-stone-800 px-2 text-xs font-semibold text-white">Hidden</span>}
                   {r.revealed_at && <span className="rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-900 dark:bg-amber-900 dark:text-amber-100">Revealed</span>}
                   <span className="ml-auto text-xs text-[color:var(--muted)]">{relativeTime(r.created_at)}</span>

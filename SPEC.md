@@ -439,6 +439,10 @@ Logical examples, one per type:
 ```json
 { "id": "b_portrait01", "type": "image", "label": "Portrait", "value": "https://example.com/knight.png", "section": "s_notes", "alt": "Portrait of the knight" }
 ```
+**gear** (migration `0007`): an item. `label` is the gear name; `value` is the effect text (`''` = none); `quantity` is optional (an integer from 0 to 999; absent = not counted). On the sheet it shows the name, the effect underneath, and ×N with inline −/+ when there is a quantity.
+```json
+{ "id": "b_grapple001", "type": "gear", "label": "Grappling hook", "value": "+2 to Athletics when climbing", "section": "s_extras", "quantity": 2 }
+```
 **separator**: a divider with an optional sub-heading; `value` is always `null`.
 ```json
 { "id": "b_sep0000001", "type": "separator", "label": "Gear", "value": null, "section": "s_notes" }
@@ -478,6 +482,22 @@ Templates live in client code (`src/sheet/templates.ts`) and generate fresh ids 
   - The character-creation picker and the edit-mode Templates sheet list **From your GM** first, then **Standard**. An offered GM template is preselected.
   - A PC made from a GM template gets fresh block ids, and records the template's base (`core`, `blank`, …) in `characters.template`.
 - **What's blocked:** template skills can't be rolled, and template blocks can't be spotlighted. Templates don't appear in the Table tab or the GM's character list.
+
+### 5.8 Deleting characters and sessions
+- **Delete a character:** Sheet tools (in edit mode), with a confirm step. Available on any PC or NPC the user can edit: the owner of a PC, or the GM for anything. Templates use their own "Delete template" button.
+  - It's an ordinary `DELETE` on `characters` under RLS. Its sections and blocks cascade.
+  - Rolls keep their history (`character_id` becomes null). Board tokens stay as plain markers (`character_id` becomes null).
+  - Afterwards a player is sent to "Create your character"; the GM goes back to the GM screen.
+- **Delete a session:** GM only, in Members → Danger zone, with a confirm step that lists what will go.
+  - First, all the session's templates are downloaded as one `<session>-templates.fate.json` bundle:
+    ```json
+    { "format": "fate-table-templates", "version": 1, "session_name": "…", "exported_at": "…",
+      "templates": [ { …§5.6 sheet…, "kind": "template", "offered": true } ] }
+    ```
+  - Then the app runs `DELETE FROM sessions WHERE id = …` (RLS: GM only). Everything else is removed in the database by `ON DELETE CASCADE`: members, the GM-code hash, characters and their sheets, rolls, scenes and their zones, aspects and tokens, and events. The local SQL test checks that no rows of the session remain in any table.
+  - The GM code is free to reuse. Players get their membership DELETE over realtime and are sent home.
+  - Anonymous users in `auth.users` are not removed; they hold no game data.
+- **Import templates** (GM screen → Templates card) accepts a bundle or a single §5.6 sheet. It creates each as a template with fresh ids and restores `offered`.
 
 ### 5.6 Export/import (`.fate.json`)
 ```json
@@ -654,6 +674,7 @@ Layout:
   - **Move**: drag the title bar. It is free-positioned with no snapping, clamped to the board, and saved on drop. The dragged zone comes to the front (`bring_to_front`).
   - **Resize**: drag the bottom-right corner handle (minimum 160 × 120, saved on release).
   - Rename, recolour, and delete. Deleting keeps the zone's aspects, which move to the Unzoned tray.
+- **Deleting an aspect from the board:** every chip (in a zone or Scene-wide) has a **×** button (GM), with Undo. Or drag the chip onto the open table (the felt), which works from a zone or from Scene-wide. While a chip is dragged, the felt shows a hint. Over the felt it turns red and says "Release to delete this aspect". Dropping deletes the aspect, and an Undo toast restores it with the same id, zone, invokes and position. Dropping on a zone moves the chip there; dropping on the scene-wide tray (shown above the board) makes it scene-wide.
 - **Aspects in zones**:
   - Add one inside a zone with "+ Aspect".
   - Each chip shows its text and free invokes −/+.
@@ -777,6 +798,13 @@ scripts/rls-test.mjs
 ---
 
 ## 12. Theming, accessibility and errors
+_As built (Slice 9):_
+- **Theme:** Light / Dark / Auto switch on the home page and in the menu (Your settings), stored in `fate.theme`.
+- **Player colours:** never used as text colour, because several fail 4.5:1 on one background or the other. Names show in normal text with a coloured dot.
+- **Keyboard and motion:** "Skip to content" link, a visible `:focus-visible` ring everywhere, and `prefers-reduced-motion` honoured globally.
+- **Errors:** a top-level error boundary, plain-language messages (a missing function/table/column says "run `npm run db:push`"), and skeleton placeholders while sheets and cards load.
+- **Load size:** screens are code-split (lazy routes); the largest chunk is about 300 kB (84 kB gzip).
+
 - Theme: light / dark / system (default system), stored in localStorage. Colours are CSS variables used by Tailwind.
 - Text contrast is at least 4.5:1, focus rings are visible, rolls and spotlights are announced in an `aria-live` region, and the board is keyboard-operable (§8.3.3).
 - Empty states: no PCs yet (GM sees the invite), empty section, no rolls, no scenes, no active scene, no NPCs.

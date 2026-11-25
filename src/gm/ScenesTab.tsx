@@ -34,7 +34,7 @@ export default function ScenesTab() {
 
   if (desktop) {
     return (
-      <main className="mx-auto grid max-w-[110rem] grid-cols-[15rem_minmax(0,1fr)_22rem] items-start gap-4 px-4 pb-28">
+      <main id="main" tabIndex={-1} className="mx-auto grid max-w-[110rem] grid-cols-[15rem_minmax(0,1fr)_22rem] items-start gap-4 px-4 pb-28">
         <SceneList selected={scene?.id ?? null} onSelect={select} />
         <section aria-label="Scene editor">{editor}</section>
         <aside className="max-h-[calc(100dvh-10rem)] overflow-y-auto pr-1"><NpcRoster boardScene={boardScene} /></aside>
@@ -42,7 +42,7 @@ export default function ScenesTab() {
     )
   }
   return (
-    <main className="mx-auto flex max-w-screen-sm flex-col gap-3 px-3 pb-28">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-sm flex-col gap-3 px-3 pb-28">
       <div className="flex rounded-xl border border-[color:var(--border)] p-1" role="tablist">
         {(['scene', 'npcs'] as const).map((p) => (
           <button key={p} type="button" role="tab" aria-selected={pane === p} onClick={() => setPane(p)}

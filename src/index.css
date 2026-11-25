@@ -37,3 +37,14 @@ body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Visible keyboard focus everywhere (SPEC §12). Mouse/touch focus stays quiet. */
+:focus-visible {
+  outline: 3px solid #d97706;
+  outline-offset: 2px;
+}
+main:focus { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

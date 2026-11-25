@@ -18,7 +18,7 @@ export default function PlayersTab() {
   const pcs = characters.filter((c) => c.kind === 'pc')
 
   return (
-    <main className="mx-auto flex max-w-screen-xl flex-col gap-4 px-4 pb-28">
+    <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-xl flex-col gap-4 px-4 pb-28">
       {isNew && (
         <Card className="border-amber-500">
           <h2 className="text-lg font-semibold">Session created</h2>

@@ -193,6 +193,14 @@ export class ScenesStore {
     this.setContents(sceneId, (c) => ({ ...c, aspects: sortAspects(c.aspects.map((a) => (a.id === id ? { ...a, ...patch } : a))) }))
     return this.run(sceneId, supabase.from('scene_aspects').update(patch).eq('id', id))
   }
+  /** Put a deleted aspect back exactly as it was (Undo). */
+  async restoreAspect(a: SceneAspectRow) {
+    const { data, error } = await supabase.from('scene_aspects')
+      .insert({ id: a.id, scene_id: a.scene_id, zone_id: a.zone_id, text: a.text, free_invokes: a.free_invokes, position: a.position })
+      .select(SCENE_ASPECT_COLUMNS).single<SceneAspectRow>()
+    if (error) return toast(friendlyError(error), 'error')
+    this.applyRemote('scene_aspects', 'INSERT', data)
+  }
   deleteAspect(sceneId: string, id: string) {
     this.setContents(sceneId, (c) => ({ ...c, aspects: c.aspects.filter((a) => a.id !== id) }))
     return this.run(sceneId, supabase.from('scene_aspects').delete().eq('id', id))

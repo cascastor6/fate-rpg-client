@@ -20,10 +20,33 @@ const MESSAGES: Record<string, string> = {
 }
 
 /** Turn a Supabase/PostgREST error (or anything thrown) into a message for people. */
+export const STALE_USER = 'This browser’s sign-in no longer exists on the server. Reload the page to sign in again.'
+
+/** A write referenced auth.users with a user id that no longer exists (user deleted / project reset). */
+export function isStaleUser(err: unknown): boolean {
+  const e = (typeof err === 'object' && err !== null ? err : {}) as { message?: unknown; code?: unknown }
+  const m = String(e.message ?? '')
+  return (e.code === '23503' && /user_id|created_by|users/i.test(m)) || /user from sub claim in jwt does not exist/i.test(m)
+}
+
+export const OUTDATED_DB =
+  'The database is out of date for this version of the app. Run “npm run db:push” (see the README), then reload.'
+
 export function friendlyError(err: unknown): string {
-  const message = typeof err === 'object' && err !== null && 'message' in err ? String(err.message) : String(err)
+  const e = (typeof err === 'object' && err !== null ? err : {}) as { message?: unknown; code?: unknown }
+  const message = 'message' in e ? String(e.message) : String(err ?? '')
+  const code = typeof e.code === 'string' ? e.code : ''
   if (message in MESSAGES) return MESSAGES[message]
-  if (/failed to fetch|network/i.test(message)) return 'Can’t reach the server. Check your connection.'
+  // Missing function / table / column = a migration that hasn't been applied.
+  if (['PGRST202', 'PGRST204', 'PGRST205', '42883', '42P01', '42703'].includes(code) || /schema cache|does not exist/i.test(message)) {
+    return OUTDATED_DB
+  }
+  if (isStaleUser(err)) return STALE_USER
+  if (code === '42501' || /row-level security|permission denied/i.test(message)) return 'You don’t have permission to do that.'
+  if (code === '23505' || /duplicate key/i.test(message)) return 'That already exists.'
+  if (code === '23514' || /check constraint/i.test(message)) return 'That value isn’t allowed.'
+  if (/failed to fetch|network|load failed/i.test(message)) return 'Can’t reach the server. Check your connection.'
+  if (/jwt|token/i.test(message) && /expired|invalid/i.test(message)) return 'Your sign-in expired. Reload the page.'
   return message || 'Something went wrong.'
 }
 

@@ -41,7 +41,7 @@ export default function TablePage() {
   return (
     <>
       <SessionHeader tabs />
-      <main className="mx-auto flex max-w-screen-sm flex-col gap-4 px-4 py-6">
+      <main id="main" tabIndex={-1} className="mx-auto flex max-w-screen-sm flex-col gap-4 px-4 py-6">
         <Card>
           <h1 className="text-lg font-semibold">Characters</h1>
           {pcs.length ? <ul className="mt-2 flex flex-col">{pcs.map(row)}</ul> : (

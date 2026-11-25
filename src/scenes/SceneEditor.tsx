@@ -7,6 +7,7 @@ import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { ColorPicker } from '../ui/ColorPicker.tsx'
 import { isPlayerColor, type PlayerColor } from '../ui/colors.ts'
 import { Button, Notice, Spinner, TextField } from '../ui/primitives.tsx'
+import { toast } from '../ui/toast.tsx'
 import { clampToken, viewCenter, ZONE_DEFAULT } from './boardMath.ts'
 import { NarrativeScene } from './NarrativeScene.tsx'
 import { useScenes, type SceneRow, type TokenRow, type ZoneRow } from './store.ts'
@@ -42,6 +43,10 @@ export function SceneEditor({ scene, onDeleted }: { scene: SceneRow; onDeleted: 
     zoneMenu: setZoneMenu,
     addAspect: (zoneId) => setNewAspect({ zoneId }),
     moveAspect: (id, zoneId) => void store.patchAspect(scene.id, id, { zone_id: zoneId }),
+    deleteAspect: (a) => {
+      void store.deleteAspect(scene.id, a.id)
+      toast(`Deleted “${a.text}”.`, 'info', 6000, { label: 'Undo', onClick: () => void store.restoreAspect(a) })
+    },
     invokes: (a, v) => void store.patchAspect(scene.id, a.id, { free_invokes: Math.max(0, Math.min(99, v)) }),
     moveToken: (id, p) => void store.patchToken(scene.id, id, p),
     tokenMenu: setTokenMenu,

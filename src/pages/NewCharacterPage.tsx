@@ -42,7 +42,7 @@ export default function NewCharacterPage() {
   return (
     <>
       <SessionHeader tabs />
-      <main className="mx-auto max-w-screen-sm px-4 py-6">
+      <main id="main" tabIndex={-1} className="mx-auto max-w-screen-sm px-4 py-6">
         <h1 className="text-2xl font-bold">Create your character</h1>
         <form className="mt-5 flex flex-col gap-5" onSubmit={create}>
           <TextField

@@ -7,7 +7,7 @@ import type { BlockRow, CharacterRow } from '../sheet/types.ts'
 import { useSheet } from '../sheet/useSheet.ts'
 import { colorOf } from '../ui/colors.ts'
 import { IconMinus, IconPencil, IconPlus } from '../ui/icons.tsx'
-import { Spinner } from '../ui/primitives.tsx'
+import { CardSkeleton } from '../ui/Skeleton.tsx'
 import { useSpotlight } from './spotlight.ts'
 
 /**
@@ -25,10 +25,11 @@ export function CharacterCard({ character }: { character: CharacterRow }) {
   const color = colorOf(owner?.color)
   const gmColor = colorOf(me.color)
 
+  if (snapshot.status === 'loading') return <CardSkeleton />
   if (snapshot.status !== 'ready') {
     return (
       <article className="flex min-h-40 items-center justify-center rounded-2xl border-2 bg-[color:var(--card)]" style={{ borderColor: color.fill }}>
-        {snapshot.status === 'loading' ? <Spinner className="size-6" /> : <span className="text-sm text-[color:var(--muted)]">Can’t load {character.name}</span>}
+        <span className="text-sm text-[color:var(--muted)]">Can’t load {character.name}</span>
       </article>
     )
   }
@@ -83,7 +84,8 @@ export function CharacterCard({ character }: { character: CharacterRow }) {
       <header className="flex items-center gap-2 border-b border-[color:var(--border)] px-3 py-2">
         <div className="min-w-0 flex-1">
           <Link to={`/s/${c.session_id}/c/${c.id}`} className="block truncate text-lg font-bold hover:underline">{c.name}</Link>
-          <p className="truncate text-sm" style={{ color: owner ? color.fill : undefined }}>
+          <p className="truncate text-sm">
+            {owner && <span className="mr-1.5 inline-block size-2.5 rounded-full align-middle" style={{ background: color.fill }} aria-hidden="true" />}
             {owner ? owner.display_name : <span className="rounded-full bg-amber-100 px-2 text-xs font-semibold text-amber-900">Orphaned</span>}
           </p>
         </div>

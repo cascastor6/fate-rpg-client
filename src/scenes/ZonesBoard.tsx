@@ -33,6 +33,8 @@ export type BoardActions = {
   zoneMenu: (zone: ZoneRow) => void
   addAspect: (zoneId: string | null) => void
   moveAspect: (id: string, zoneId: string | null) => void
+  /** an aspect chip dropped on the open table (outside any zone) is deleted */
+  deleteAspect: (a: SceneAspectRow) => void
   invokes: (a: SceneAspectRow, value: number) => void
   moveToken: (id: string, patch: Pick<TokenRow, 'x' | 'y'>) => void
   tokenMenu: (t: TokenRow) => void
@@ -187,6 +189,7 @@ export function ZonesBoard({
       const asp = contents.aspects.find((x) => x.id === id.slice(7))
       const target = over ? String(over.id) : null
       if (!asp || !target) return
+      if (target === 'board') return actions.deleteAspect(asp)
       const zoneId = target === 'tray' ? null : target.startsWith('zonedrop:') ? target.slice(9) : undefined
       if (zoneId !== undefined && zoneId !== asp.zone_id) actions.moveAspect(asp.id, zoneId)
     }
@@ -206,25 +209,19 @@ export function ZonesBoard({
           onClick={() => zoomTo(zoom * 1.25)} disabled={zoom >= ZOOM_MAX} aria-label="Zoom in"><IconPlus /></button>
         <button type="button" className="min-h-11 rounded-xl border border-[color:var(--border)] px-3 text-sm font-semibold" onClick={fit}>Fit</button>
       </div>
+      <Tray aspects={unzoned} actions={actions} activeId={active} />
       <div
         ref={view}
         {...pinchHandlers}
         onPointerCancel={pinchEnd}
         onPointerLeave={pinchEnd}
-        className="relative h-[60dvh] min-h-80 overflow-auto rounded-2xl border border-[color:var(--border)] bg-stone-300 dark:bg-stone-900 lg:h-[calc(100dvh-16rem)]"
+        className="relative h-[60dvh] min-h-80 overflow-auto rounded-2xl border border-[color:var(--border)] bg-stone-300 dark:bg-stone-900 lg:h-[calc(100dvh-22rem)]"
         style={{ touchAction: 'pan-x pan-y' }}
         aria-label="Zones board"
         role="region"
       >
         <div style={{ width: scale(BOARD_W), height: scale(BOARD_H), position: 'relative' }}>
-          <div
-            className="absolute left-0 top-0 rounded-xl"
-            style={{
-              width: BOARD_W, height: BOARD_H, transform: `scale(${zoom})`, transformOrigin: '0 0',
-              background: 'radial-gradient(circle at 30% 20%, #2f5d46, #1f3f30)',
-              backgroundImage: 'radial-gradient(circle at 30% 20%, #2f5d46, #1f3f30), repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 2px, transparent 2px 6px)',
-            }}
-          >
+          <Felt zoom={zoom} enabled={!!actions} draggingAspect={!!active?.startsWith('aspect:')}>
             {contents.zones.map((z) => (
               <Zone
                 key={z.id}
@@ -248,10 +245,9 @@ export function ZonesBoard({
                 {actions ? 'Add a zone to start laying out the scene.' : 'The GM hasn’t laid out this scene yet.'}
               </p>
             )}
-          </div>
+          </Felt>
         </div>
       </div>
-      <Tray aspects={unzoned} actions={actions} activeId={active} />
     </div>
   )
 
@@ -264,6 +260,36 @@ export function ZonesBoard({
         {activeAspect ? <ChipBody aspect={activeAspect} /> : null}
       </DragOverlay>
     </DndContext>
+  )
+}
+
+/**
+ * The table felt. While an aspect chip is dragged it becomes a drop target that deletes
+ * the aspect (it sits below zones and the tray, which win when the chip is over them).
+ */
+function Felt({ zoom, enabled, draggingAspect, children }: { zoom: number; enabled: boolean; draggingAspect: boolean; children: ReactNode }) {
+  const drop = useDroppable({ id: 'board', disabled: !enabled, data: { z: -1 } })
+  const deleting = draggingAspect && drop.isOver
+  return (
+    <div
+      ref={drop.setNodeRef}
+      className="absolute left-0 top-0 rounded-xl"
+      style={{
+        width: BOARD_W, height: BOARD_H, transform: `scale(${zoom})`, transformOrigin: '0 0',
+        backgroundImage: 'radial-gradient(circle at 30% 20%, #2f5d46, #1f3f30), repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 2px, transparent 2px 6px)',
+        boxShadow: deleting ? 'inset 0 0 0 12px rgba(220,38,38,.85)' : undefined,
+      }}
+    >
+      {children}
+      {draggingAspect && (
+        <p
+          className={`pointer-events-none absolute inset-x-0 top-4 z-[20000] mx-auto w-fit rounded-full px-5 py-2 text-xl font-bold shadow-lg ${deleting ? 'bg-red-600 text-white' : 'bg-black/60 text-white'}`}
+          aria-live="polite"
+        >
+          {deleting ? 'Release to delete this aspect' : 'Drop on the open table to delete · on a zone or Scene-wide to move'}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -384,6 +410,8 @@ function Chip({ aspect, actions, activeId }: { aspect: SceneAspectRow; actions?:
                 onClick={() => actions.spot!.toggle(aspect.id)} aria-pressed={!!lit}
                 aria-label={`${lit ? 'Clear highlight on' : 'Highlight for everyone:'} ${aspect.text}`}>★</button>
             )}
+            <button type="button" className="flex size-10 items-center justify-center rounded text-2xl leading-none text-stone-400 hover:bg-red-50 hover:text-red-700"
+              onClick={() => actions.deleteAspect(aspect)} aria-label={`Delete aspect ${aspect.text}`} title="Delete">×</button>
           </span>
         ) : aspect.free_invokes > 0 && (
           <span className="rounded bg-amber-100 px-1 text-xs tabular-nums" title="Free invokes">{aspect.free_invokes}</span>

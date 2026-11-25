@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { errorCode, friendlyError } from '../lib/errors.ts'
 import { extractInviteCode, isValidInviteCode } from '../lib/invite.ts'
 import { getLastSession, setLastSession } from '../lib/storage.ts'
-import { ensureAnonymousUser, isConfigured, supabase } from '../lib/supabase.ts'
+import { ensureAnonymousUser, isConfigured, supabase, withFreshUserRetry } from '../lib/supabase.ts'
 import { ColorPicker } from '../ui/ColorPicker.tsx'
 import { firstUnusedColor, isPlayerColor, type PlayerColor } from '../ui/colors.ts'
 import { Button, Card, FullScreenSpinner, Notice, TextField } from '../ui/primitives.tsx'
@@ -61,11 +61,11 @@ export default function JoinPage() {
     setBusy(true)
     setError(null)
     try {
-      const { data: sessionId, error } = await supabase.rpc('join_session', {
+      const { data: sessionId, error } = await withFreshUserRetry(() => supabase.rpc('join_session', {
         p_invite_code: code,
         p_display_name: name.trim(),
         p_color: color,
-      })
+      }))
       if (error) throw error
       setLastSession({
         sessionId: sessionId as string,
@@ -84,7 +84,7 @@ export default function JoinPage() {
   if (state.kind === 'loading') return <FullScreenSpinner label="Finding session…" />
 
   return (
-    <main className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-full max-w-screen-sm flex-col gap-5 px-4 py-8">
       <Link to="/" className="text-sm text-[color:var(--muted)] underline-offset-4 hover:underline">← Fate Table</Link>
 
       {state.kind === 'invalid' && (
