@@ -62,10 +62,13 @@ export type SectionRow = {
 export type TemplateId = 'core' | 'accelerated' | 'condensed' | 'blank' | 'npc'
 
 /** A row of public.characters. */
+export type CharacterKind = 'pc' | 'npc' | 'template'
+
 export type CharacterRow = {
   id: string
   session_id: string
-  kind: 'pc' | 'npc'
+  /** 'template' = a GM-made starting sheet players can pick (SPEC §5.7) */
+  kind: CharacterKind
   owner_id: string | null
   name: string
   template: TemplateId
@@ -91,7 +94,7 @@ export type LogicalSection = { id: string; title: string }
 export type SheetJson = {
   format?: 'fate-table-sheet'
   version?: 1
-  kind: 'pc' | 'npc'
+  kind: CharacterKind
   name: string
   template: TemplateId
   fate_points: number

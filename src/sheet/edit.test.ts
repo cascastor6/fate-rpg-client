@@ -100,3 +100,47 @@ describe('structural ops', () => {
     expect(d.blocks).toHaveLength(0)
   })
 })
+
+describe('mergeSheet / withFreshIds', () => {
+  it('merges sections by title and appends the rest, keeping existing blocks first', async () => {
+    const { mergeSheet } = await import('./io.ts')
+    const base = buildTemplate('blank', 'Aldric') // Aspects, Notes
+    base.blocks = [{ id: 'b_mine000001', type: 'aspect', label: 'Mine', value: 'x', section: 's_aspects' }]
+    const add = buildTemplate('accelerated', 'ignored')
+    const res = mergeSheet(base, add)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.sheet.name).toBe('Aldric')
+    expect(res.sheet.sections.map((s) => s.title)).toEqual(['Aspects', 'Notes', 'Approaches', 'Stunts', 'Stress', 'Consequences'])
+    const aspects = res.sheet.blocks.filter((b) => b.section === 's_aspects').map((b) => b.label)
+    expect(aspects[0]).toBe('Mine')
+    expect(aspects).toHaveLength(6)
+    expect(res.sheet.blocks.filter((b) => b.section === 's_notes').map((b) => b.label)).toEqual(['Notes'])
+    const ids = res.sheet.blocks.map((b) => b.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(res.added).toBe(add.blocks.length)
+    const r = parseImport(JSON.stringify(res.sheet))
+    expect(r.ok && r.notes).toEqual([])
+  })
+  it('refuses to go over the block limit', async () => {
+    const { mergeSheet } = await import('./io.ts')
+    const base = buildTemplate('core', 'a')
+    let sheet = base
+    for (let i = 0; i < 8; i++) {
+      const r = mergeSheet(sheet, buildTemplate('core', 'x'))
+      if (!r.ok) { expect(r.error).toMatch(/max 300/); return }
+      sheet = r.sheet
+    }
+    throw new Error('expected the limit to be hit')
+  })
+  it('withFreshIds renews block ids and only colliding section ids', async () => {
+    const { withFreshIds } = await import('./io.ts')
+    const t = buildTemplate('core', 'a')
+    const f = withFreshIds(t, ['s_skills'])
+    expect(f.blocks.every((b, i) => b.id !== t.blocks[i].id)).toBe(true)
+    expect(f.sections.find((s) => s.title === 'Aspects')!.id).toBe('s_aspects')
+    const skills = f.sections.find((s) => s.title === 'Skills')!.id
+    expect(skills).not.toBe('s_skills')
+    expect(f.blocks.filter((b) => b.section === skills)).toHaveLength(18)
+  })
+})

@@ -3,17 +3,20 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { friendlyError } from '../lib/errors.ts'
 import { supabase } from '../lib/supabase.ts'
 import { useSession } from '../session/SessionProvider.tsx'
-import { buildTemplate, TEMPLATES } from '../sheet/templates.ts'
-import type { TemplateId } from '../sheet/types.ts'
+import { TemplatePicker } from '../sheet/components/TemplatePicker.tsx'
+import { sheetFromChoice, templateChoices } from '../sheet/templateSources.ts'
 import { Button, Notice, TextField } from '../ui/primitives.tsx'
 import { SessionHeader } from './SessionHeader.tsx'
 
 /** /s/:id/new-character — pick a template and a name (SPEC §5.5). */
 export default function NewCharacterPage() {
-  const { session, isGm, refresh } = useSession()
+  const { session, isGm, refresh, characters } = useSession()
+  const choices = templateChoices(characters, false)
+  const all = [...choices.gm, ...choices.builtin]
   const navigate = useNavigate()
   const [name, setName] = useState('')
-  const [template, setTemplate] = useState<TemplateId>('core')
+  // The GM's own template is the natural default when there is one.
+  const [templateKey, setTemplateKey] = useState(() => all[0]?.key ?? 'b:core')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,7 +27,8 @@ export default function NewCharacterPage() {
     setBusy(true)
     setError(null)
     try {
-      const sheet = buildTemplate(template, name.trim() || 'Unnamed')
+      const choice = all.find((c) => c.key === templateKey) ?? all[0]
+      const sheet = await sheetFromChoice(choice, name.trim() || 'Unnamed')
       const { data, error } = await supabase.rpc('create_character', { p_session_id: session.id, p_sheet: sheet })
       if (error) throw error
       await refresh()
@@ -49,30 +53,10 @@ export default function NewCharacterPage() {
             placeholder="Sir Aldric"
             autoFocus
           />
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-medium">Start from</legend>
-            {TEMPLATES.map((t) => (
-              <label
-                key={t.id}
-                className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border-2 bg-[color:var(--card)] px-4 py-3 ${
-                  template === t.id ? 'border-amber-600' : 'border-[color:var(--border)]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="template"
-                  value={t.id}
-                  checked={template === t.id}
-                  onChange={() => setTemplate(t.id)}
-                  className="size-5 accent-amber-700"
-                />
-                <span>
-                  <span className="block font-semibold">{t.name}</span>
-                  <span className="block text-sm text-[color:var(--muted)]">{t.blurb}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          <div>
+            <p className="mb-2 text-sm font-medium">Start from</p>
+            <TemplatePicker gm={choices.gm} builtin={choices.builtin} value={templateKey} onChange={setTemplateKey} />
+          </div>
           {error && <Notice tone="error">{error}</Notice>}
           <Button type="submit" busy={busy}>Create character</Button>
         </form>

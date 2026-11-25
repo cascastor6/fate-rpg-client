@@ -142,7 +142,7 @@ create index on session_members (user_id);
 create table characters (
   id                 uuid primary key default gen_random_uuid(),
   session_id         uuid not null references sessions(id) on delete cascade,
-  kind               text not null default 'pc' check (kind in ('pc','npc')),
+  kind               text not null default 'pc' check (kind in ('pc','npc','template')),  -- 'template' added in 0006 (§5.7)
   owner_id           uuid references auth.users(id) on delete set null,  -- PCs: the player; NPCs: null (owned by the GM role)
   name               text not null default 'Unnamed' check (char_length(name) <= 80),
   template           text not null check (template in ('core','accelerated','condensed','blank','npc')),
@@ -463,6 +463,22 @@ Templates live in client code (`src/sheet/templates.ts`) and generate fresh ids 
 | **Blank** | — | — | — | — | Sections Aspects and Notes, no blocks |
 | **NPC** (GM only) | 2 × Aspect, empty, label "Aspect" | 2 × skill with an **empty, fillable label** and value 0 | — | — | Sections "Aspects" and "Skills" only |
 
+### 5.7 GM-made templates
+- The GM can make templates for their session. A template is a `characters` row with `kind = 'template'` (migration `0006_templates.sql`), so it reuses the sheet tables, the block editor and RLS.
+- **Who sees it:**
+  - Only the GM can create, edit or delete a template.
+  - A new template is a **draft** that only the GM sees.
+  - **Offer to players** sets `visible_to_players`. Players can then read it, but not change it, exactly like a visible NPC.
+- **Creating one (GM screen → Templates card):**
+  - **New template**: name it, choose what to base it on (a standard template or another GM template), then edit it with Edit layout.
+  - **Save a copy as template** in Sheet tools on any sheet the GM can edit.
+  - The template page has *Offer to players / Stop offering* and *Delete template*.
+  - In edit mode it also sets the starting fate points and refresh.
+- **Using one:**
+  - The character-creation picker and the edit-mode Templates sheet list **From your GM** first, then **Standard**. An offered GM template is preselected.
+  - A PC made from a GM template gets fresh block ids, and records the template's base (`core`, `blank`, …) in `characters.template`.
+- **What's blocked:** template skills can't be rolled, and template blocks can't be spotlighted. Templates don't appear in the Table tab or the GM's character list.
+
 ### 5.6 Export/import (`.fate.json`)
 ```json
 { "format": "fate-table-sheet", "version": 1, "kind": "pc", "name": "Sir Aldric", "template": "core",
@@ -493,7 +509,10 @@ Templates live in client code (`src/sheet/templates.ts`) and generate fresh ids 
 - dnd-kit drag handles move blocks within or across sections, and section handles reorder sections. Pointer, touch and keyboard sensors are on, and touch has an activation delay so the page still scrolls.
 - Per block: label, type change (only where values convert cleanly, e.g. number ↔ skill ↔ counter, text ↔ aspect), type-specific fields, and delete with an undo toast.
 - Per section: rename, delete (`delete_section`), and "Add block" with a type picker.
-- Sheet menu: rename, apply template (with a confirm), export JSON, import JSON.
+- **Templates** (edit-mode toolbar): pick a standard or GM template, then either:
+  - **Add to this sheet**: its sections are merged in by title (case-insensitive), with its blocks after the existing ones and new sections appended. Everything already on the sheet stays. It's refused if the result would exceed 300 blocks or 30 sections.
+  - **Replace sheet…**: after a confirm, the whole sheet is replaced. Name, kind and fate points are kept.
+- **Sheet tools**: export JSON, import JSON (preview + confirm), and for the GM, save a copy as a template.
 
 ### 6.3 Saving model (per block)
 - Every edit is one row-level write: `patch_block`, `set_stress_box`, `adjust_block_value`, `adjust_fate_points`, or a plain insert/delete. Nothing rewrites the whole sheet except import or template.
@@ -726,7 +745,7 @@ Layout:
 | `/join/:code` | Join (display name + colour) |
 | `/s/:sessionId` | Redirects by role: GM → `/gm`; player → own sheet, or character creation |
 | `/s/:sessionId/new-character` | Template picker + name |
-| `/s/:sessionId/c/:characterId` | Character sheet (editable, or read-only if not yours) |
+| `/s/:sessionId/c/:characterId` | Character sheet (editable, or read-only if not yours); also GM templates |
 | `/s/:sessionId/table`, `/s/:sessionId/scene` | Player tabs |
 | `/s/:sessionId/gm` and `/s/:sessionId/gm/scenes` | GM tabs: Players, Scenes & NPCs |
 | `*` | Not found |

@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { friendlyError } from '../lib/errors.ts'
+import { supabase } from '../lib/supabase.ts'
 import { signed } from '../dice/ladder.ts'
 import { useSession } from '../session/SessionProvider.tsx'
 import { EditSheet } from '../sheet/components/EditSheet.tsx'
-import { SheetToolsSheet } from '../sheet/components/EditSheets.tsx'
+import { SheetToolsSheet, TemplatesSheet } from '../sheet/components/EditSheets.tsx'
 import { SheetView } from '../sheet/components/SheetView.tsx'
 import type { SheetOpBody } from '../sheet/ops.ts'
 import type { BlockRow, CharacterRow } from '../sheet/types.ts'
+import { getSheetStore } from '../sheet/store.ts'
 import { useSheet } from '../sheet/useSheet.ts'
 import { BottomSheet } from '../ui/BottomSheet.tsx'
 import { colorOf } from '../ui/colors.ts'
@@ -18,15 +21,22 @@ import { BottomBar } from './BottomBar.tsx'
 import { SessionHeader } from './SessionHeader.tsx'
 import { SessionMenu } from './SessionMenu.tsx'
 
-/** /s/:id/c/:characterId — a character sheet in play mode (editable or read-only). */
-export default function SheetPage() {
+/** /s/:id/c/:characterId — remount per character so edit mode etc. don't carry over. */
+export default function SheetPageRoute() {
   const { characterId = '' } = useParams()
-  const { uid, isGm, session, members } = useSession()
+  return <SheetPage key={characterId} characterId={characterId} />
+}
+
+/** A character sheet in play mode (editable or read-only), or edit mode. */
+function SheetPage({ characterId }: { characterId: string }) {
+  const { uid, isGm, session, members, refresh } = useSession()
+  const navigate = useNavigate()
   const { snapshot, enqueue } = useSheet(characterId)
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [tools, setTools] = useState(false)
+  const [templates, setTemplates] = useState(false)
 
   if (snapshot.status === 'loading') return <FullScreenSpinner label="Loading sheet…" />
   if (snapshot.status !== 'ready') {
@@ -50,7 +60,27 @@ export default function SheetPage() {
   const owner = members.find((m) => m.user_id === c.owner_id)
   const ownerColor = colorOf(owner?.color)
 
-  const subtitle = own ? undefined : c.kind === 'npc' ? 'NPC' : owner ? `Played by ${owner.display_name}` : 'No player (orphaned)'
+  const isTemplate = c.kind === 'template'
+  const subtitle = own
+    ? undefined
+    : isTemplate
+      ? `Template · ${c.visible_to_players ? 'offered to players' : 'draft, only you can see it'}`
+      : c.kind === 'npc' ? 'NPC' : owner ? `Played by ${owner.display_name}` : 'No player (orphaned)'
+
+  const setOffered = async (offered: boolean) => {
+    const { error } = await supabase.from('characters').update({ visible_to_players: offered }).eq('id', c.id)
+    if (error) return toast(friendlyError(error), 'error')
+    await refresh()
+    void getSheetStore(c.id).load()
+    toast(offered ? 'Players can now start from this template.' : 'Template hidden from players.')
+  }
+  const deleteTemplate = async () => {
+    if (!window.confirm(`Delete the template “${c.name}”? Characters made from it are not affected.`)) return
+    const { error } = await supabase.from('characters').delete().eq('id', c.id)
+    if (error) return toast(friendlyError(error), 'error')
+    await refresh()
+    navigate(`/s/${session.id}/gm`, { replace: true })
+  }
 
   const onRoll = (b: BlockRow) =>
     toast(`Rolling ${b.label || 'that skill'} (${signed(typeof b.value === 'number' ? b.value : 0)}) arrives with the dice in Slice 6.`)
@@ -75,11 +105,32 @@ export default function SheetPage() {
           <SaveState pending={pending} offline={offline} />
         </div>
 
-        {c.kind === 'pc' && (
+        {isTemplate && isGm && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
+            <p className="flex-1 text-sm">
+              {c.visible_to_players
+                ? 'Players see this template when they create a character or pick a template while editing.'
+                : 'Build the layout with Edit layout, then offer it to players.'}
+            </p>
+            <Button variant={c.visible_to_players ? 'secondary' : 'primary'} onClick={() => void setOffered(!c.visible_to_players)}>
+              {c.visible_to_players ? 'Stop offering' : 'Offer to players'}
+            </Button>
+            <Button variant="ghost" className="text-red-700 dark:text-red-400" onClick={() => void deleteTemplate()}>Delete template</Button>
+          </div>
+        )}
+
+        {(c.kind === 'pc' || isTemplate) && (
           <div className="flex items-center gap-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm">
-            <span className="whitespace-nowrap">
-              Fate Points <strong className="text-lg tabular-nums">{c.fate_points}</strong>
-            </span>
+            {isTemplate && editing ? (
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                Starting FP
+                <Stepper label="starting fate points" value={c.fate_points} min={0} onStep={(d) => enqueue({ kind: 'fate', delta: d })} />
+              </span>
+            ) : (
+              <span className="whitespace-nowrap">
+                {isTemplate ? 'Starts with ' : ''}Fate Points <strong className="text-lg tabular-nums">{c.fate_points}</strong>
+              </span>
+            )}
             <span className="text-[color:var(--muted)]">·</span>
             {editing ? (
               <span className="ml-auto flex items-center gap-2">
@@ -98,6 +149,7 @@ export default function SheetPage() {
           editing ? (
             <div className="flex flex-wrap items-center gap-2 rounded-2xl border-2 border-amber-600 bg-amber-50 px-3 py-2 dark:bg-amber-950/40">
               <span className="flex-1 text-sm font-semibold">Editing layout: drag the dots to move, gear for settings</span>
+              <Button variant="secondary" onClick={() => setTemplates(true)}>Templates</Button>
               <Button variant="secondary" onClick={() => setTools(true)}>Sheet tools</Button>
               <Button onClick={() => setEditMode(false)}>Done</Button>
             </div>
@@ -110,12 +162,12 @@ export default function SheetPage() {
           )
         )}
 
-        {!canEdit && <Notice>You’re viewing {owner ? `${owner.display_name}’s` : 'this'} character. It’s read-only for you.</Notice>}
+        {!canEdit && !isTemplate && <Notice>You’re viewing {owner ? `${owner.display_name}’s` : 'this'} character. It’s read-only for you.</Notice>}
 
         {editing ? (
           <EditSheet data={data} send={enqueue} />
         ) : (
-          <SheetView data={data} canEdit={canEdit} canRoll={canEdit} send={enqueue} onRoll={onRoll} />
+          <SheetView data={data} canEdit={canEdit} canRoll={canEdit && !isTemplate} send={enqueue} onRoll={onRoll} />
         )}
 
         {!canEdit && (
@@ -133,6 +185,8 @@ export default function SheetPage() {
         )}
         {editing ? (
           <Button className="flex-1" onClick={() => setEditMode(false)}>Done editing</Button>
+        ) : isTemplate ? (
+          canEdit && <Button className="flex-1" onClick={() => setEditMode(true)}><IconPencil className="size-4" /> Edit layout</Button>
         ) : canEdit && (
           <Button className="flex-1" onClick={() => toast('Rolling arrives with the dice in Slice 6.')}>
             <IconDie /> Roll
@@ -149,6 +203,7 @@ export default function SheetPage() {
       </BottomBar>
 
       <SessionMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      {templates && <TemplatesSheet data={data} send={enqueue} onClose={() => setTemplates(false)} />}
       {tools && <SheetToolsSheet data={data} send={enqueue} onClose={() => setTools(false)} />}
       {renaming && <RenameSheet character={c} send={enqueue} onClose={() => setRenaming(false)} />}
     </>

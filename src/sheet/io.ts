@@ -109,7 +109,7 @@ export function parseImport(text: string): ImportResult {
     sheet: {
       format: 'fate-table-sheet',
       version: 1,
-      kind: r.kind === 'npc' ? 'npc' : 'pc',
+      kind: r.kind === 'npc' || r.kind === 'template' ? r.kind : 'pc',
       name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 80) : 'Imported character',
       template: TEMPLATES.includes(r.template as TemplateId) ? (r.template as TemplateId) : 'blank',
       fate_points: int(r.fate_points, 3),
@@ -127,4 +127,55 @@ export function sheetToRows(sheet: SheetJson, characterId: string): { sections: 
     sections: sheet.sections.map((s, i) => ({ character_id: characterId, id: s.id, title: s.title, position: (i + 1) * POSITION_STEP, version: 0 })),
     blocks: sheet.blocks.map((b, i) => ({ ...logicalToRowFields(b), character_id: characterId, position: (i + 1) * POSITION_STEP, version: 0 })),
   }
+}
+
+/** Fresh block ids (and section ids that collide with `avoid`) so a copy never clashes. */
+export function withFreshIds(sheet: SheetJson, avoidSectionIds: Iterable<string> = []): SheetJson {
+  const avoid = new Set(avoidSectionIds)
+  const sectionMap = new Map<string, string>()
+  const sections = sheet.sections.map((s) => {
+    const id = avoid.has(s.id) ? newSectionId() : s.id
+    sectionMap.set(s.id, id)
+    return { ...s, id }
+  })
+  return {
+    ...sheet,
+    sections,
+    blocks: sheet.blocks.map((b) => ({ ...b, id: newBlockId(), section: sectionMap.get(b.section) ?? b.section })),
+  }
+}
+
+export type MergeResult = { ok: true; sheet: SheetJson; added: number } | { ok: false; error: string }
+
+/**
+ * Add a template's sections and blocks to an existing sheet (SPEC §6.2). Template sections
+ * whose title matches an existing section (ignoring case) go into that section, after its
+ * blocks; other sections are appended. Everything already on the sheet is kept as is.
+ */
+export function mergeSheet(base: SheetJson, add: SheetJson): MergeResult {
+  const key = (t: string) => t.trim().toLowerCase()
+  const byTitle = new Map(base.sections.map((s) => [key(s.title), s.id]))
+  const fresh = withFreshIds(add, base.sections.map((s) => s.id))
+  const target = new Map<string, string>() // added section id -> final section id
+  const sections = [...base.sections]
+  for (const s of fresh.sections) {
+    const existing = byTitle.get(key(s.title))
+    if (existing) target.set(s.id, existing)
+    else {
+      sections.push(s)
+      byTitle.set(key(s.title), s.id)
+      target.set(s.id, s.id)
+    }
+  }
+  const added = fresh.blocks.map((b) => ({ ...b, section: target.get(b.section) ?? b.section }))
+  if (sections.length > MAX_SECTIONS) return { ok: false, error: `That would make ${sections.length} sections (max ${MAX_SECTIONS}).` }
+  if (base.blocks.length + added.length > MAX_BLOCKS) {
+    return { ok: false, error: `That would make ${base.blocks.length + added.length} blocks (max ${MAX_BLOCKS}).` }
+  }
+  // Keep blocks grouped by section, in section order, existing ones first.
+  const blocks = sections.flatMap((s) => [
+    ...base.blocks.filter((b) => b.section === s.id),
+    ...added.filter((b) => b.section === s.id),
+  ])
+  return { ok: true, sheet: { ...base, sections, blocks }, added: added.length }
 }

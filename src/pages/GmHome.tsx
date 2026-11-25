@@ -4,6 +4,7 @@ import { InvitePanel, MembersList, YouPanel } from '../session/SessionWidgets.ts
 import { colorOf } from '../ui/colors.ts'
 import { Button, Card } from '../ui/primitives.tsx'
 import { SessionHeader } from './SessionHeader.tsx'
+import { TemplatesCard } from './TemplatesCard.tsx'
 
 /** Slice 2 placeholder GM screen: invite + members. The real GM screen lands in Slice 7. */
 export default function GmHome() {
@@ -11,6 +12,7 @@ export default function GmHome() {
   const [params, setParams] = useSearchParams()
   const isNew = params.get('new') === '1'
   const players = members.filter((m) => m.role === 'player').length
+  const people = characters.filter((c) => c.kind !== 'template')
 
   return (
     <>
@@ -31,11 +33,11 @@ export default function GmHome() {
         <InvitePanel emphasis={isNew} />
         <Card>
           <h2 className="text-lg font-semibold">Characters</h2>
-          {characters.length === 0 ? (
+          {people.length === 0 ? (
             <p className="mt-2 text-sm text-[color:var(--muted)]">No characters yet. Players create theirs when they join.</p>
           ) : (
             <ul className="mt-2 flex flex-col">
-              {characters.map((c) => {
+              {people.map((c) => {
                 const owner = members.find((m) => m.user_id === c.owner_id)
                 const color = colorOf(owner?.color)
                 return (
@@ -51,6 +53,7 @@ export default function GmHome() {
             </ul>
           )}
         </Card>
+        <TemplatesCard />
         <MembersList />
         <YouPanel />
       </main>

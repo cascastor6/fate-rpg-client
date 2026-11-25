@@ -189,4 +189,32 @@ select t_ok((select count(*) from session_events where kind = 'visibility_change
 select count(public.claim_gm('wrong code number ' || g)) from generate_series(1, 9) g;
 select t_err($$select public.claim_gm('wrong code number 99')$$, 'rate_limited', '11th failure is rate limited');
 reset role;
+-- GM-made templates (0006)
+select set_config('request.jwt.claims', :A1, false); set role authenticated;
+select t_err($$select public.create_character('$$ || :'sa' || $$', '{"kind":"template","name":"x","sections":[],"blocks":[]}')$$, 'not_gm', 'player cannot create a template');
+reset role;
+select set_config('request.jwt.claims', :GM, false); set role authenticated;
+select public.create_character(:'sa', '{"kind":"template","name":"Silver Order Knight","template":"core",
+  "sections":[{"id":"s_aspects","title":"Aspects"},{"id":"s_skills","title":"Skills"}],
+  "blocks":[{"id":"b_tpla000001","type":"aspect","label":"Oath","value":"","section":"s_aspects"},
+            {"id":"b_tpls000001","type":"skill","label":"Fight","value":2,"section":"s_skills"}]}'::jsonb) as tpl \gset
+select t_ok((select kind from characters where id = :'tpl') = 'template', 'GM creates a template');
+select t_err($$select public.roll_dice('$$ || :'sa' || $$', '$$ || :'tpl' || $$', 'b_tpls000001')$$, 'not_allowed', 'templates cannot be rolled');
+reset role;
+select set_config('request.jwt.claims', :A1, false); set role authenticated;
+select t_ok((select count(*) from characters where id = :'tpl') = 0, 'player cannot see a draft template');
+select t_ok((select count(*) from sheet_blocks where character_id = :'tpl') = 0, 'player cannot see draft template blocks');
+reset role;
+select set_config('request.jwt.claims', :GM, false); set role authenticated;
+update characters set visible_to_players = true where id = :'tpl';
+reset role;
+select set_config('request.jwt.claims', :A1, false); set role authenticated;
+select t_ok((select count(*) from sheet_blocks where character_id = :'tpl') = 2, 'player can read an offered template');
+select t_ok(t_rows($$update public.sheet_blocks set label = 'x' where character_id = '$$ || :'tpl' || $$'$$) = 0, 'player cannot edit an offered template');
+select t_ok(t_rows($$delete from public.characters where id = '$$ || :'tpl' || $$'$$) = 0, 'player cannot delete an offered template');
+reset role;
+select set_config('request.jwt.claims', :B, false); set role authenticated;
+select t_ok((select count(*) from characters where id = :'tpl') = 0, 'other session cannot see the template');
+reset role;
+
 select 'ALL DONE' as result;

@@ -199,6 +199,18 @@ try {
   expectRows(await a1.from('scene_zones').select('id').eq('scene_id', prep.id), 1, 'player sees zones of the active scene')
   expectNoRows(await a1.from('scene_tokens').update({ x: 0 }).eq('scene_id', prep.id).select(), 'player cannot move tokens')
 
+  section('GM-made templates')
+  expectError(await a1.rpc('create_character', { p_session_id: sa, p_sheet: { kind: 'template', name: 'x', sections: [], blocks: [] } }),
+    'player cannot create a template', /not_gm/)
+  const tpl = (await gm.rpc('create_character', { p_session_id: sa, p_sheet: {
+    kind: 'template', name: 'Knight', template: 'core', sections: [{ id: 's_aspects', title: 'Aspects' }],
+    blocks: [{ id: 'b_tpla000001', type: 'aspect', label: 'Oath', value: '', section: 's_aspects' }] } })).data
+  check(!!tpl, 'GM creates a template')
+  expectNoRows(await a1.from('characters').select('id').eq('id', tpl), 'player cannot see a draft template')
+  await gm.from('characters').update({ visible_to_players: true }).eq('id', tpl)
+  expectRows(await a1.from('sheet_blocks').select('id').eq('character_id', tpl), 1, 'player can read an offered template')
+  expectNoRows(await a1.from('sheet_blocks').update({ label: 'x' }).eq('character_id', tpl).select(), 'player cannot edit an offered template')
+
   section('GM code rate limit')
   for (let i = 0; i < 9; i++) await a1.rpc('claim_gm', { p_gm_code: `wrong code number ${i}` })
   expectError(await a1.rpc('claim_gm', { p_gm_code: 'wrong code number 99' }), '11th failed claim in 10 minutes is rate limited', /rate_limited/)

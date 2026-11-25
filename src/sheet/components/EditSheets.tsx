@@ -1,13 +1,18 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { friendlyError } from '../../lib/errors.ts'
+import { supabase } from '../../lib/supabase.ts'
+import { useSession } from '../../session/SessionProvider.tsx'
 import { positionBetween } from '../../lib/positions.ts'
 import { BottomSheet } from '../../ui/BottomSheet.tsx'
 import { Button, Notice } from '../../ui/primitives.tsx'
 import { BLOCK_TYPE_INFO, defaultBlock } from '../defaults.ts'
 import { newBlockId, newSectionId } from '../ids.ts'
-import { exportFileName, exportSheet, parseImport, sheetToRows } from '../io.ts'
+import { exportFileName, exportSheet, mergeSheet, parseImport, sheetToRows, withFreshIds } from '../io.ts'
 import type { SheetData, SheetOpBody } from '../ops.ts'
-import { buildTemplate, TEMPLATES } from '../templates.ts'
-import { BLOCK_TYPES, type SectionRow, type SheetJson, type TemplateId } from '../types.ts'
+import { sheetFromChoice, templateChoices } from '../templateSources.ts'
+import { BLOCK_TYPES, type SectionRow, type SheetJson } from '../types.ts'
+import { TemplatePicker } from './TemplatePicker.tsx'
 
 const input = 'min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--bg)] px-3 text-base'
 
@@ -111,13 +116,16 @@ export function SectionSheet({
   )
 }
 
-type Pending = { kind: 'template'; template: TemplateId } | { kind: 'import'; sheet: SheetJson; notes: string[] }
+type PendingImport = { sheet: SheetJson; notes: string[] }
 
-/** Sheet-wide tools: export / import JSON, apply a template. Both replacements ask first. */
+/** Sheet-wide tools: export / import JSON, and (GM) save a copy as a template. */
 export function SheetToolsSheet({ data, send, onClose }: { data: SheetData; send: (op: SheetOpBody) => void; onClose: () => void }) {
+  const { isGm, session, refresh } = useSession()
+  const navigate = useNavigate()
   const file = useRef<HTMLInputElement>(null)
-  const [pending, setPending] = useState<Pending | null>(null)
+  const [pending, setPending] = useState<PendingImport | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const c = data.character
 
   const download = () => {
@@ -138,68 +146,138 @@ export function SheetToolsSheet({ data, send, onClose }: { data: SheetData; send
     if (f.size > 1_000_000) return setError('That file is too big to be a character sheet.')
     const res = parseImport(await f.text())
     if (!res.ok) return setError(res.error)
-    setPending({ kind: 'import', sheet: res.sheet, notes: res.notes })
+    setPending({ sheet: res.sheet, notes: res.notes })
   }
 
-  const confirm = () => {
-    if (!pending) return
-    const sheet: SheetJson = pending.kind === 'import'
-      ? pending.sheet
-      : { ...buildTemplate(pending.template, c.name), fate_points: c.fate_points }
-    send({ kind: 'replace', sheet, preview: sheetToRows(sheet, c.id) })
-    onClose()
+  const saveAsTemplate = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const sheet = withFreshIds({ ...exportSheet(data), kind: 'template', name: `${c.name} (template)` })
+      const { data: id, error } = await supabase.rpc('create_character', { p_session_id: session.id, p_sheet: sheet })
+      if (error) throw error
+      await refresh()
+      onClose()
+      navigate(`/s/${session.id}/c/${id}`)
+    } catch (e) {
+      setError(friendlyError(e))
+      setBusy(false)
+    }
+  }
+
+  if (pending) {
+    // Imports keep the kind of the sheet they land on (a PC stays a PC).
+    const sheet = { ...pending.sheet, kind: c.kind }
+    return (
+      <BottomSheet open title="Import sheet" onDismiss={onClose}>
+        <div className="flex flex-col gap-4">
+          <p>
+            Replace <strong>{c.name}</strong> with <strong>{sheet.name}</strong>: {sheet.sections.length} sections,{' '}
+            {sheet.blocks.length} blocks, {sheet.fate_points} fate points, refresh {sheet.refresh}.
+          </p>
+          {pending.notes.length > 0 && (
+            <Notice>
+              <ul className="list-disc pl-4">{pending.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+            </Notice>
+          )}
+          <Notice tone="error">This replaces every section and block on the sheet. Export first if you might want it back.</Notice>
+          <div className="flex gap-2">
+            <Button variant="danger" className="flex-1" onClick={() => { send({ kind: 'replace', sheet, preview: sheetToRows(sheet, c.id) }); onClose() }}>
+              Replace sheet
+            </Button>
+            <Button variant="secondary" onClick={() => setPending(null)}>Back</Button>
+          </div>
+        </div>
+      </BottomSheet>
+    )
   }
 
   return (
     <BottomSheet open title="Sheet tools" onDismiss={onClose}>
-      {!pending ? (
-        <div className="flex flex-col gap-5">
-          <section className="flex flex-col gap-2">
-            <h3 className="font-semibold">Export / import</h3>
-            <p className="text-sm text-[color:var(--muted)]">Save this sheet as a .fate.json file, or load one (replaces this sheet).</p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={download}>Export JSON</Button>
-              <Button variant="secondary" onClick={() => file.current?.click()}>Import JSON…</Button>
-              <input ref={file} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = '' }} />
-            </div>
-            {error && <Notice tone="error">{error}</Notice>}
-          </section>
-          <section className="flex flex-col gap-2">
-            <h3 className="font-semibold">Start over from a template</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {TEMPLATES.map((t) => (
-                <Button key={t.id} variant="secondary" onClick={() => setPending({ kind: 'template', template: t.id })}>{t.name}</Button>
-              ))}
-            </div>
-          </section>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {pending.kind === 'import' ? (
-            <>
-              <p>
-                Replace <strong>{c.name}</strong> with <strong>{pending.sheet.name}</strong>: {pending.sheet.sections.length} sections,{' '}
-                {pending.sheet.blocks.length} blocks, {pending.sheet.fate_points} fate points, refresh {pending.sheet.refresh}.
-              </p>
-              {pending.notes.length > 0 && (
-                <Notice>
-                  <ul className="list-disc pl-4">{pending.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
-                </Notice>
-              )}
-            </>
-          ) : (
-            <p>
-              Replace everything on <strong>{c.name}</strong> with a blank{' '}
-              <strong>{TEMPLATES.find((t) => t.id === pending.template)?.name}</strong> sheet? Fate points stay at {c.fate_points}.
-            </p>
-          )}
-          <Notice tone="error">This replaces every section and block on the sheet. Export first if you might want it back.</Notice>
-          <div className="flex gap-2">
-            <Button variant="danger" className="flex-1" onClick={confirm}>Replace sheet</Button>
-            <Button variant="secondary" onClick={() => setPending(null)}>Back</Button>
+      <div className="flex flex-col gap-5">
+        <section className="flex flex-col gap-2">
+          <h3 className="font-semibold">Export / import</h3>
+          <p className="text-sm text-[color:var(--muted)]">Save this sheet as a .fate.json file, or load one (replaces this sheet).</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={download}>Export JSON</Button>
+            <Button variant="secondary" onClick={() => file.current?.click()}>Import JSON…</Button>
+            <input ref={file} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = '' }} />
           </div>
-        </div>
-      )}
+        </section>
+        {isGm && c.kind !== 'template' && (
+          <section className="flex flex-col gap-2">
+            <h3 className="font-semibold">Make a template</h3>
+            <p className="text-sm text-[color:var(--muted)]">Copy this sheet’s layout into a new template players can start from. You can tidy it before offering it.</p>
+            <Button variant="secondary" busy={busy} onClick={() => void saveAsTemplate()}>Save a copy as template</Button>
+          </section>
+        )}
+        {error && <Notice tone="error">{error}</Notice>}
+      </div>
+    </BottomSheet>
+  )
+}
+
+/**
+ * Templates while editing (SPEC §6.2): add a template's sections to this sheet
+ * (merged by section title) or replace the sheet with it. Includes GM-made templates.
+ */
+export function TemplatesSheet({ data, send, onClose }: { data: SheetData; send: (op: SheetOpBody) => void; onClose: () => void }) {
+  const { characters, isGm } = useSession()
+  const c = data.character
+  const choices = templateChoices(characters.filter((x) => x.id !== c.id), isGm)
+  const all = [...choices.gm, ...choices.builtin]
+  const [key, setKey] = useState(all[0]?.key ?? 'b:core')
+  const [confirmReplace, setConfirmReplace] = useState(false)
+  const [busy, setBusy] = useState<'add' | 'replace' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const choice = all.find((x) => x.key === key) ?? all[0]
+
+  const run = async (mode: 'add' | 'replace') => {
+    setBusy(mode)
+    setError(null)
+    try {
+      const fromTemplate = await sheetFromChoice(choice, c.name)
+      let sheet: SheetJson
+      if (mode === 'add') {
+        const merged = mergeSheet(exportSheet(data), fromTemplate)
+        if (!merged.ok) throw new Error(merged.error)
+        sheet = merged.sheet
+      } else {
+        // Replacing keeps the name, kind and current fate points.
+        sheet = { ...fromTemplate, kind: c.kind, name: c.name, fate_points: c.fate_points }
+      }
+      send({ kind: 'replace', sheet, preview: sheetToRows(sheet, c.id) })
+      onClose()
+    } catch (e) {
+      setError(friendlyError(e))
+      setBusy(null)
+    }
+  }
+
+  return (
+    <BottomSheet open title="Templates" onDismiss={onClose}>
+      <div className="flex flex-col gap-4">
+        <TemplatePicker gm={choices.gm} builtin={choices.builtin} value={key} onChange={(k) => { setKey(k); setConfirmReplace(false) }} />
+        <p className="text-sm text-[color:var(--muted)]">
+          <strong>Add</strong> puts the template’s blocks into sections with the same name (or new sections) and keeps everything already here.{' '}
+          <strong>Replace</strong> swaps the whole sheet for the template.
+        </p>
+        {error && <Notice tone="error">{error}</Notice>}
+        {!confirmReplace ? (
+          <div className="flex flex-wrap gap-2">
+            <Button className="flex-1" busy={busy === 'add'} onClick={() => void run('add')}>Add to this sheet</Button>
+            <Button variant="secondary" onClick={() => setConfirmReplace(true)}>Replace sheet…</Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-xl border border-red-300 p-3 dark:border-red-800">
+            <p className="text-sm">Replace every section and block on <strong>{c.name}</strong> with <strong>{choice.name}</strong>? Name and fate points stay. This can’t be undone; export first if you might want it back.</p>
+            <div className="flex gap-2">
+              <Button variant="danger" busy={busy === 'replace'} onClick={() => void run('replace')}>Replace sheet</Button>
+              <Button variant="secondary" onClick={() => setConfirmReplace(false)}>Keep</Button>
+            </div>
+          </div>
+        )}
+      </div>
     </BottomSheet>
   )
 }

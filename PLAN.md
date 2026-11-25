@@ -99,6 +99,24 @@ If Vault turns out to be disabled on your project, I'll tell you how to enable i
 
 ---
 
+## Slice 4b (added): templates while editing + GM-made templates
+**Build**: §5.7 and the Templates part of §6.2. Migration `0006_templates.sql`: `characters.kind` gains `'template'`; `create_character`, `roll_dice` and `set_spotlight` are updated.
+- GM screen → Templates card: New template, Offer to players / Stop offering, Delete template.
+- Sheet tools → Save a copy as template.
+- Edit-mode **Templates** sheet: Add to this sheet (merge) / Replace sheet.
+- Character creation lists GM templates first.
+
+**Test**:
+1. The GM makes "Knight" based on Accelerated, adds an aspect "Oath", and leaves it as a draft. A joining player sees only the standard templates.
+2. The GM offers it. The player's creation page shows **From your GM → Knight**, preselected. The created sheet has Oath.
+3. In edit mode → Templates → Fate Core → **Add**: Skills etc. appear and Aspects merge into one section.
+4. Templates → Knight → **Replace**: the sheet goes back to Knight, and the name is kept.
+5. The GM uses Save a copy as template on a sheet, then Delete template.
+
+**You do**: `npm run db:push` (applies `0006`).
+
+---
+
 ## Slice 5: Realtime sheet sync
 **Build**
 - The per-session realtime channel (§10): filtered INSERT/UPDATE, unfiltered DELETE (unknown keys ignored), `visibility_changed` handling, version gating, and pending operations re-applied on top.
