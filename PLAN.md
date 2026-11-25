@@ -85,9 +85,10 @@ Section references (§) point to SPEC.md.
 **Build**
 - `ladder.ts`, the seeded PRNG, the `Dice3D` component (4 cubes, deterministic tumble, reduced-motion fallback).
 - Tap a skill to roll. The Roll button opens the roll dialog (plain, skill or bonus) → `roll_dice` RPC → the animation plays from the response, and the realtime copy is de-duplicated.
+- Floating 4dF button (SPEC §7.5) on the sheet and the GM screen: one tap does a plain roll, long-press opens the roll dialog, and it is locked while a roll is in flight.
 - Every client animates new rolls. The result line matches §7.3. A roll log drawer (latest 50 + live) is available to everyone, including the GM screen.
 
-**Test (two browsers)**: B taps Fight (+3). Both windows tumble and land on *identical* faces, and the result text is the same in both (e.g. "+1 Fight +3 = Great (+4)", depending on what the server decided). Check that the log entry matches the `rolls` row in the table editor. Reload A: the log shows history without replaying animations. Turn on reduced motion in the OS or DevTools and check the fade fallback. Check boundary ladder text by temporarily giving a skill +8.
+**Test (two browsers)**: B taps Fight (+3). Both windows tumble and land on *identical* faces, and the result text is the same in both (e.g. "+1 Fight +3 = Great (+4)", depending on what the server decided). Check that the log entry matches the `rolls` row in the table editor. Reload A: the log shows history without replaying animations. Turn on reduced motion in the OS or DevTools and check the fade fallback. Check boundary ladder text by temporarily giving a skill +8. Floating button: tap it on B's sheet and on A's GM screen; both windows animate both rolls. Double-tapping it fast produces only one roll. Long-press opens the dialog. At 375 px it sits above the bottom bar and doesn't cover the fate point or menu buttons.
 
 **You do**: nothing new.
 
@@ -112,7 +113,7 @@ Section references (§) point to SPEC.md.
 - `vite-plugin-pwa`: manifest, icons, a service worker, and an update-available toast.
 - Persistent cache and queue in localStorage, an offline banner, and the reconnect flush → refetch sequence (§9.3). Roll is disabled while offline.
 - Wake lock toggle, shake-to-roll enable button (with the iOS permission prompt), vibration on landing, the polished toast system, and the full-screen big result view (§7.6).
-- Sticky bottom bar finalised (safe areas, menu contents).
+- Sticky bottom bar and floating 4dF button finalised (safe areas, menu contents, disabled while offline).
 
 **Test**: Lighthouse (DevTools) PWA installability check, then install on Android (Chrome) or iOS (Share → Add to Home Screen) from an HTTPS URL (see the note on HTTPS below). Turn on airplane mode, make 3 edits (the banner shows "3 changes waiting"), reload while still offline (the sheet renders from cache), reconnect (changes sync, and the GM browser sees them). Wake lock: the screen stays on with the toggle on. Shake: tap enable → accept the iOS prompt → shake → a roll happens. Android vibrates on landing. A GM award shows a toast on the phone. After any roll the phone shows the big result, and a tap dismisses it.
 

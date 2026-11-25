@@ -366,7 +366,7 @@ Import validates the file, regenerates any duplicate ids, shows a preview count,
 3. Each client plays the animation for that row, landing on `faces`. The roller starts the animation from the RPC response straight away and de-duplicates the realtime copy by `id`.
 4. Rolls that arrive more than 10 s after `created_at`, e.g. after a reconnect, go into the log without animating.
 
-Rolling needs a connection; the Roll button is disabled offline.
+Rolling needs a connection; the Roll button and the floating 4dF button (§7.5) are disabled offline.
 
 ### 7.2 Animation (CSS 3D)
 - Four cubes (`transform-style: preserve-3d`), each with faces `+`, `+`, blank, blank, `−`, `−` on opposite pairs.
@@ -382,10 +382,19 @@ Ladder (`src/dice/ladder.ts`): -2 Terrible, -1 Poor, 0 Mediocre, +1 Average, +2 
 ### 7.4 Roll dialog
 The sticky bar's **Roll** button opens a sheet with: "Plain 4dF", a searchable list of the character's rollable skills, and a bonus stepper (−5…+5, e.g. for a +2 invoke declared before the roll). Tapping a skill on the sheet rolls it with bonus 0.
 
-### 7.5 Roll log
+### 7.5 Floating 4dF button
+- A circular floating action button (56 × 56 px, showing a die face) that does a **plain 4dF roll in one tap**: `roll_dice(session_id)` with no character, no skill and bonus 0. The result reads e.g. "Bea: +1 = Average (+1)".
+- It appears on every session screen for every member: player sheet, GM screen and the roll log. That gives the GM a one-tap roll too, since the GM screen has no Roll button of its own.
+- Position: fixed bottom-right with safe-area insets. On the player sheet it sits just above the sticky bottom bar (`bottom: bar height + 16px`); on other screens 16 px from the bottom edge. It never covers the bottom bar's controls.
+- **Long-press** (500 ms) opens the roll dialog (§7.4) instead, for skill or bonus rolls.
+- While a roll is being decided or animating, the button shows a spinner and ignores taps, which prevents double rolls. It is disabled (greyed, with an "Offline" tooltip) when offline, and hidden while a bottom sheet, the big result view or edit-mode drag is active.
+- Accessible name "Roll 4dF". It can be focused from the keyboard, and `R` triggers it when focus isn't in an input.
+- The bottom bar's **Roll** button stays: it opens the roll dialog for skill rolls, while the floating button is the fast plain roll.
+
+### 7.6 Roll log
 A right-hand drawer on desktop and a bottom drawer on phones, opened from the header or menu. It loads the latest 50 rolls on open, then appends live. Each entry shows the roller, faces as mini dice, the breakdown, the ladder result and a relative time. Everyone in the session sees it.
 
-### 7.6 Big result view
+### 7.7 Big result view
 On phones, after any roll lands, a full-screen overlay shows the total and ladder name in huge type with the roller's name and skill, so the phone can be shown to the table. It closes on tap or after 4 s, and the roller can pin it open. It can be turned off for other people's rolls in settings.
 
 ---
@@ -395,6 +404,7 @@ On phones, after any roll lands, a full-screen overlay shows the total and ladde
 - **Desktop (≥ 1024 px)**: a responsive grid (`grid-cols-[repeat(auto-fill,minmax(280px,1fr))]`) with one compact card per character. Each card shows the character and player name, fate points with −/+ (award/take), all aspects, stress tracks (boxes toggle in place), filled consequences, and an "N empty" chip that expands the empty ones. Empty blocks are collapsed. "Open sheet" opens the full sheet with GM edit rights.
 - **Phone**: a horizontal scroll-snap pager with one card per character, swipeable, with dots and name chips to jump between them. No library.
 - **Scene aspects panel**: a list of scene/situation aspects, each with a free-invoke counter (−/+). The GM can add, edit, delete and drag to reorder. Players see the same panel read-only, collapsible above their sheet.
+- **Floating 4dF button** (§7.5) for quick GM rolls; GM rolls appear in everyone's log and animate for everyone.
 - **GM fate point pool**: a big counter in the GM toolbar with −/+ and a "Reset to N" helper (N = number of PCs, the usual scene start).
 - **Award/take**: −/+ on each card calls `adjust_fate_points(character, ±1)`. That inserts a `session_events` row, and the player gets a toast ("The GM gave you a fate point").
 - **Members**: the invite link with copy and share (`navigator.share` when available), the list of members and their roles, kick, and "assign character to…".
